@@ -27,3 +27,13 @@ dependencies {
 }
 
 tasks.test { useJUnitPlatform() }
+
+tasks.register<Jar>("agentJar") {
+    archiveFileName.set("wake-agent.jar")
+    manifest { attributes["Main-Class"] = "dev.jano.wake.agent.MainKt" }
+    from(sourceSets.main.get().output)
+    dependsOn(configurations.runtimeClasspath)
+    from({ configurations.runtimeClasspath.get().filter { it.name.endsWith(".jar") }.map { zipTree(it) } })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/versions/9/module-info.class")
+}

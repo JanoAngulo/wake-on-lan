@@ -25,6 +25,25 @@ class DiscoveryResponderTest {
     }
 
     @Test
+    fun startedResponderAnswersOverUdp() {
+        val live = DiscoveryResponder(port = 0, lanPrefix = "127.0.0.0" to 8, reply = { reply })
+        live.start()
+        try {
+            java.net.DatagramSocket().use { client ->
+                client.soTimeout = 2_000
+                val probe = DISCOVERY_PROBE.toByteArray()
+                client.send(java.net.DatagramPacket(probe, probe.size, InetAddress.getLoopbackAddress(), live.boundPort))
+                val buffer = ByteArray(512)
+                val packet = java.net.DatagramPacket(buffer, buffer.size)
+                client.receive(packet)
+                assertEquals(reply, WakeJson.decodeFromString(DiscoveryReply.serializer(), String(buffer, 0, packet.length)))
+            }
+        } finally {
+            live.stop()
+        }
+    }
+
+    @Test
     fun wrongPayloadIgnored() {
         assertNull(responder.handle("HELLO".toByteArray(), InetAddress.getByName("192.168.1.23")))
     }

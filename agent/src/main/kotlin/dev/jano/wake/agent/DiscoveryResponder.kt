@@ -17,6 +17,8 @@ class DiscoveryResponder(
 ) {
     @Volatile private var socket: DatagramSocket? = null
 
+    val boundPort: Int get() = socket?.localPort ?: -1
+
     fun handle(payload: ByteArray, from: InetAddress): ByteArray? {
         if (payload.decodeToString().trim() != DISCOVERY_PROBE) return null
         if (from !is Inet4Address) return null
@@ -25,10 +27,9 @@ class DiscoveryResponder(
     }
 
     fun start() {
-        val s = DatagramSocket(null).apply {
-            reuseAddress = true
-            bind(InetSocketAddress(port))
-        }
+        val s = DatagramSocket(null)
+        s.reuseAddress = true
+        s.bind(InetSocketAddress(port))
         socket = s
         Thread({
             val buffer = ByteArray(256)
