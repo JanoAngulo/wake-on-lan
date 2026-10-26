@@ -2,7 +2,7 @@ package dev.jano.wake.main
 
 import dev.jano.wake.data.Device
 import dev.jano.wake.net.PhoneNet
-import dev.jano.wake.protocol.PendingCommand
+import dev.jano.wake.protocol.StatusResponse
 import dev.jano.wake.status.PcState
 import dev.jano.wake.status.StopKind
 
@@ -10,7 +10,7 @@ data class MainUiState(
     val device: Device?,
     val deviceCount: Int,
     val pc: PcState,
-    val pending: PendingCommand?,
+    val agentStatus: StatusResponse?,
     val phone: PhoneNet,
     val home: Boolean,
     val haptics: Boolean,

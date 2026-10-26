@@ -8,7 +8,7 @@ import dev.jano.wake.net.ProbeResult
 import dev.jano.wake.net.isHome
 import dev.jano.wake.net.subnetOf
 import dev.jano.wake.protocol.Action
-import dev.jano.wake.protocol.PendingCommand
+import dev.jano.wake.protocol.StatusResponse
 import dev.jano.wake.protocol.parseMac
 import dev.jano.wake.status.PcState
 import dev.jano.wake.status.StatusMachine
@@ -35,18 +35,18 @@ class MainViewModel(
 ) : ViewModel() {
     private val machine = StatusMachine(clock)
     private val phone = MutableStateFlow(PhoneNet(false, null, null))
-    private val pending = MutableStateFlow<PendingCommand?>(null)
+    private val agentStatus = MutableStateFlow<StatusResponse?>(null)
     private val message = MutableStateFlow<UiMessage?>(null)
     private var downs = 0
     private var undoJob: Job? = null
 
-    val ui: StateFlow<MainUiState> = combine(graph.repository.store, machine.state, pending, phone, message) { store, pc, pend, net, msg ->
+    val ui: StateFlow<MainUiState> = combine(graph.repository.store, machine.state, agentStatus, phone, message) { store, pc, status, net, msg ->
         val device = store.selected
         MainUiState(
             device = device,
             deviceCount = store.devices.size,
             pc = pc,
-            pending = pend,
+            agentStatus = status,
             phone = net,
             home = isHome(net, device?.subnet),
             haptics = store.settings.haptics,
@@ -88,7 +88,7 @@ class MainViewModel(
 
         if (status != null && status.ip != ip) graph.repository.updateIp(device.id, status.ip)
         machine.onProbe(host, status)
-        pending.value = status?.pending
+        agentStatus.value = status
 
         downs = if (host is ProbeResult.Down) downs + 1 else 0
         if (downs >= 3 || ip == null) rediscover(device)
