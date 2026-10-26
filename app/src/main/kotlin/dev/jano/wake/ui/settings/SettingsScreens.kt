@@ -44,10 +44,13 @@ fun SettingsScreen(
     onExport: () -> Unit,
     onAdvanced: () -> Unit,
     onHelp: () -> Unit,
+    onGuide: () -> Unit,
     onBack: () -> Unit,
 ) {
     ScreenScaffold("Settings", onBack) {
         KeyValueCard(inset = 0.dp) {
+            ListRow("How to connect", "Set up the PC and pair this phone", WakeIcons.Wifi, onGuide)
+            RowDivider()
             ListRow("Devices", "Add, edit, pair and group your PCs", WakeIcons.Power, onDevices)
             RowDivider()
             ListRow("Import devices", "From a JSON file", WakeIcons.Plus, onImport)

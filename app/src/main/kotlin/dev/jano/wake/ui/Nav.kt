@@ -38,6 +38,7 @@ import dev.jano.wake.ui.settings.DevicesScreen
 import dev.jano.wake.ui.settings.PcSetupHelpScreen
 import dev.jano.wake.ui.settings.SettingsScreen
 import dev.jano.wake.ui.settings.SettingsViewModel
+import dev.jano.wake.ui.settings.SetupGuideScreen
 import dev.jano.wake.ui.setup.FindPcScreen
 import dev.jano.wake.ui.setup.ManualDeviceForm
 import dev.jano.wake.ui.setup.PairScreen
@@ -55,6 +56,7 @@ private object Routes {
     const val DEVICE = "settings/device/{id}"
     const val ADVANCED = "settings/advanced"
     const val HELP = "settings/help"
+    const val GUIDE = "settings/guide"
     fun device(id: String) = "settings/device/$id"
 }
 
@@ -94,6 +96,7 @@ fun WakeNavHost() {
                 onFind = setupVm::find,
                 onPick = { reply -> pairing = reply; nav.navigate(Routes.PAIR) },
                 onManual = { nav.navigate(Routes.MANUAL) },
+                onGuide = { nav.navigate(Routes.GUIDE) },
                 onBack = if (nav.previousBackStackEntry != null) ({ nav.popBackStack() }) else null,
             )
         }
@@ -132,6 +135,7 @@ fun WakeNavHost() {
                 onExport = { export.launch("wake-devices.json") },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },
                 onHelp = { nav.navigate(Routes.HELP) },
+                onGuide = { nav.navigate(Routes.GUIDE) },
                 onBack = { nav.popBackStack() },
             )
         }
@@ -172,6 +176,9 @@ fun WakeNavHost() {
         }
         composable(Routes.ADVANCED) { AdvancedScreen(store, { settingsVm.setPollMs(it) }, { settingsVm.setHaptics(it) }, { nav.popBackStack() }) }
         composable(Routes.HELP) { PcSetupHelpScreen { nav.popBackStack() } }
+        composable(Routes.GUIDE) {
+            SetupGuideScreen(onFindPc = { nav.navigate(Routes.FIND) }, onTroubleshoot = { nav.navigate(Routes.HELP) }, onBack = { nav.popBackStack() })
+        }
     }
 }
 

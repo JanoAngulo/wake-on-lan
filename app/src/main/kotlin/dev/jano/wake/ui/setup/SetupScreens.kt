@@ -37,10 +37,18 @@ import dev.jano.wake.ui.theme.WakeShapes
 import dev.jano.wake.ui.theme.WakeType
 
 @Composable
-fun FindPcScreen(state: SetupUiState, onFind: () -> Unit, onPick: (DiscoveryReply) -> Unit, onManual: () -> Unit, onBack: (() -> Unit)?) {
+fun FindPcScreen(
+    state: SetupUiState,
+    onFind: () -> Unit,
+    onPick: (DiscoveryReply) -> Unit,
+    onManual: () -> Unit,
+    onGuide: () -> Unit,
+    onBack: (() -> Unit)?,
+) {
     LaunchedEffect(Unit) { if (!state.searched && !state.searching) onFind() }
     ScreenScaffold("Find my PC", onBack) {
         BodyText("Wake looks for the Wake agent on your home network. Make sure it's running on your PC: the green power icon in the system tray.")
+        KeyValueCard(inset = 0.dp) { ListRow("New here?", "See how to set up the PC and pair this phone", WakeIcons.Wifi, onGuide) }
         if (state.found.isNotEmpty()) {
             KeyValueCard(inset = 0.dp) {
                 state.found.forEachIndexed { i, reply ->
