@@ -40,6 +40,18 @@ class BackupCodecTest {
     }
 
     @Test
+    fun mergeAddsNewDevicesAndSkipsKnownMacs() {
+        val incoming = listOf(
+            pc.copy(id = "other-id", name = "Renamed", paired = false),
+            Device(id = "d9", name = "Laptop", mac = "00:00:00:00:00:02"),
+        )
+        val merged = BackupCodec.merge(store, incoming, listOf(Folder("f1", "Desk"), Folder("f2", "Servers")))
+        assertEquals(listOf("MY-PC", "Laptop"), merged.devices.map { it.name })
+        assertTrue(merged.devices.first().paired, "existing pairing must survive an import")
+        assertEquals(listOf("f1", "f2"), merged.folders.map { it.id })
+    }
+
+    @Test
     fun importRegeneratesCollidingIds() {
         val json = """{"version":1,"devices":[{"id":"x","name":"A","mac":"00:00:00:00:00:01"},""" +
             """{"id":"x","name":"B","mac":"00:00:00:00:00:02"}],"folders":[]}"""

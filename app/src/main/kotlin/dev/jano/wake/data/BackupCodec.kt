@@ -26,4 +26,18 @@ object BackupCodec {
         }
         devices to backup.folders
     }
+
+    /** Adds imported devices whose MAC isn't known yet; existing devices (and their pairing) are untouched. */
+    fun merge(store: Store, devices: List<Device>, folders: List<Folder>): Store {
+        val knownMacs = store.devices.map { it.mac }.toSet()
+        val knownIds = store.devices.map { it.id }.toSet()
+        val added = devices
+            .filter { it.mac !in knownMacs }
+            .map { if (it.id in knownIds) it.copy(id = UUID.randomUUID().toString()) else it }
+        val knownFolders = store.folders.map { it.id }.toSet()
+        return store.copy(
+            devices = store.devices + added,
+            folders = store.folders + folders.filter { it.id !in knownFolders },
+        )
+    }
 }

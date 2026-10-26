@@ -161,6 +161,16 @@ class MainViewModelTest {
     }
 
     @Test
+    fun wakeAllSendsEveryDeviceInFolder() = scope.runTest {
+        repo.upsertDevice(pc.copy(folderId = "f1"))
+        repo.upsertDevice(Device(id = "d2", name = "NAS", mac = "00:00:00:00:00:02", folderId = "f1"))
+        repo.upsertDevice(Device(id = "d3", name = "Laptop", mac = "00:00:00:00:00:03"))
+        vm.wakeAll("f1")
+        advanceUntilIdle()
+        assertEquals(listOf("0A:1B:2C:3D:4E:5F", "00:00:00:00:00:02"), sentWakes.map { it.value })
+    }
+
+    @Test
     fun commandsIgnoredUnlessOnWithAgent() = scope.runTest {
         seed()
         vm.shutdown()

@@ -113,6 +113,23 @@ class MainViewModel(
         }
     }
 
+    /** Wake every device in a folder (Wake all). Status tracking stays on the selected device. */
+    fun wakeAll(folderId: String) {
+        viewModelScope.launch {
+            val store = graph.repository.store.first()
+            store.devices.filter { it.folderId == folderId }.forEach { device ->
+                val mac = parseMac(device.mac) ?: return@forEach
+                runCatching { graph.waker.send(mac, device.broadcast, device.port) }
+                if (device.id == store.selected?.id) machine.onWakeSent()
+            }
+            message.value = UiMessage.Info("Wake signal sent to ${store.folders.firstOrNull { it.id == folderId }?.name ?: "folder"}")
+        }
+    }
+
+    fun select(deviceId: String) {
+        viewModelScope.launch { graph.repository.select(deviceId) }
+    }
+
     fun shutdown() = stop(Action.SHUTDOWN, StopKind.SHUTDOWN)
 
     fun reboot() = stop(Action.REBOOT, StopKind.REBOOT)
