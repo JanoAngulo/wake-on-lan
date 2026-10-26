@@ -10,7 +10,8 @@ import dev.jano.wake.protocol.ErrorBody
 import dev.jano.wake.protocol.H_NONCE
 import dev.jano.wake.protocol.H_SIGNATURE
 import dev.jano.wake.protocol.H_TIMESTAMP
-import dev.jano.wake.protocol.PairChallenge
+import dev.jano.wake.protocol.PairConfirmed
+import dev.jano.wake.protocol.PairOffer
 import dev.jano.wake.protocol.PairFinish
 import dev.jano.wake.protocol.PairStart
 import dev.jano.wake.protocol.RequestVerifier
@@ -23,6 +24,7 @@ import dev.jano.wake.protocol.decodePublic
 import dev.jano.wake.protocol.deriveSecret
 import dev.jano.wake.protocol.encodePublic
 import dev.jano.wake.protocol.generateX25519
+import dev.jano.wake.protocol.staleProof
 import dev.jano.wake.protocol.transcript
 import kotlinx.serialization.KSerializer
 import java.net.InetSocketAddress
@@ -106,6 +108,12 @@ class AgentServer(
         } else {
             verifier.verify(exchange.requestMethod, exchange.requestURI.path, body, SignedHeaders(timestamp, nonce, signature))
         }
+        if (result == VerifyResult.STALE) {
+            // Signature already checked, so this request really came from the paired phone.
+            val now = clock()
+            val body = ErrorBody("stale", now, staleProof(store.load()!!, nonce!!, now))
+            return json(exchange, 401, WakeJson.encodeToString(ErrorBody.serializer(), body))
+        }
         if (result != VerifyResult.OK) return error(exchange, 401, result.name.lowercase())
 
         val (value, serializer) = try {
@@ -124,12 +132,12 @@ class AgentServer(
         } catch (e: kotlinx.serialization.SerializationException) {
             return error(exchange, 400, "bad_request")
         }
+        // The first phone to start owns this pairing window; nobody else can reset it.
+        if (session?.code == code) return error(exchange, 409, "busy")
         val keys = generateX25519()
         val agentPub = encodePublic(keys.public)
-        val t = transcript(request.phonePublicKey, agentPub)
-        session = PairSession(code, request.phonePublicKey, keys, t)
-        val challenge = PairChallenge(agentPub, confirmTag(code, "agent", t))
-        json(exchange, 200, WakeJson.encodeToString(PairChallenge.serializer(), challenge))
+        session = PairSession(code, request.phonePublicKey, keys, transcript(request.phonePublicKey, agentPub))
+        json(exchange, 200, WakeJson.encodeToString(PairOffer.serializer(), PairOffer(agentPub)))
     }
 
     @Synchronized
@@ -150,7 +158,8 @@ class AgentServer(
         val secret = deriveSecret(current.agentKeys.private, decodePublic(current.phonePub), current.transcript)
         store.save(secret)
         onPaired()
-        exchange.sendResponseHeaders(204, -1)
+        val confirmed = PairConfirmed(confirmTag(current.code, "agent", current.transcript))
+        json(exchange, 200, WakeJson.encodeToString(PairConfirmed.serializer(), confirmed))
     }
 
     private fun error(exchange: HttpExchange, status: Int, code: String) =

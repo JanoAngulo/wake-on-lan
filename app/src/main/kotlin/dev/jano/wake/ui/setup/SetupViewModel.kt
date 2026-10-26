@@ -115,6 +115,7 @@ class SetupViewModel(private val graph: AppGraph) : ViewModel() {
         fun pairingMessage(reason: PairingError): String = when (reason) {
             PairingError.NOT_PAIRING -> "Open the Wake tray icon on your PC and choose Pair phone first."
             PairingError.BAD_CODE -> "That code didn't match. Start pairing again on the PC."
+            PairingError.BUSY -> "Another phone is pairing with this PC right now. Start pairing again on the PC."
             PairingError.AGENT_MISMATCH -> "Couldn't verify the PC. Start pairing again on the PC."
             PairingError.NETWORK -> "Couldn't reach the PC. Check you're on home Wi-Fi."
         }

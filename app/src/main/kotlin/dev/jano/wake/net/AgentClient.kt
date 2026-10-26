@@ -12,6 +12,7 @@ import dev.jano.wake.protocol.H_TIMESTAMP
 import dev.jano.wake.protocol.StatusResponse
 import dev.jano.wake.protocol.WakeJson
 import dev.jano.wake.protocol.sign
+import dev.jano.wake.protocol.staleProof
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -23,6 +24,9 @@ import java.io.IOException
 
 class AgentUnavailable(cause: Throwable) : IOException(cause)
 class AgentRejected(val error: String) : IOException("agent rejected request: $error")
+
+/** The agent proved its clock differs from ours; we adopted it and should retry once. */
+private class ClockCorrected : IOException("clock corrected")
 
 private val JSON = "application/json".toMediaType()
 
@@ -47,9 +51,12 @@ class AgentClient(
         withContext(Dispatchers.IO) {
             try {
                 execute(method, path, body, serializer)
-            } catch (e: AgentRejected) {
-                if (e.error != "stale") throw e
-                execute(method, path, body, serializer)
+            } catch (e: ClockCorrected) {
+                try {
+                    execute(method, path, body, serializer)
+                } catch (again: ClockCorrected) {
+                    throw AgentRejected("stale")
+                }
             }
         }
 
@@ -73,7 +80,10 @@ class AgentClient(
             val text = it.body.string()
             if (it.isSuccessful) return WakeJson.decodeFromString(serializer, text)
             val error = runCatching { WakeJson.decodeFromString(ErrorBody.serializer(), text) }.getOrNull()
-            if (error?.error == "stale") offsetMs = error.serverTimeMs - clock()
+            if (error?.error == "stale" && error.proof == staleProof(secret, headers.nonce, error.serverTimeMs)) {
+                offsetMs = error.serverTimeMs - clock()
+                throw ClockCorrected()
+            }
             throw AgentRejected(error?.error ?: "http_${it.code}")
         }
     }

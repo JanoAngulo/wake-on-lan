@@ -59,11 +59,17 @@ data class DiscoveryReply(
 @Serializable
 data class PairStart(val phonePublicKey: String)
 
+/** Reply to /pair/start: deliberately carries nothing derived from the code. */
 @Serializable
-data class PairChallenge(val agentPublicKey: String, val agentConfirm: String)
+data class PairOffer(val agentPublicKey: String)
 
 @Serializable
 data class PairFinish(val phonePublicKey: String, val phoneConfirm: String)
 
+/** Sent only after the phone has proved the code, so a bystander can't brute-force it offline. */
 @Serializable
-data class ErrorBody(val error: String, val serverTimeMs: Long)
+data class PairConfirmed(val agentConfirm: String)
+
+/** [proof] is set on "stale" replies to a correctly signed request (see staleProof). */
+@Serializable
+data class ErrorBody(val error: String, val serverTimeMs: Long, val proof: String? = null)

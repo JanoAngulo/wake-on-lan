@@ -10,6 +10,8 @@ import dev.jano.wake.protocol.StatusResponse
 import dev.jano.wake.protocol.VerifyResult
 import dev.jano.wake.protocol.WakeJson
 import kotlinx.coroutines.runBlocking
+import dev.jano.wake.protocol.staleProof
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
@@ -51,17 +53,37 @@ class AgentClientTest {
         assertEquals(VerifyResult.OK, verifier.verify("GET", request.url.encodedPath, ByteArray(0), headersOf(request)))
     }
 
+    /** First reply: "stale" with the agent's clock, proven (or not) for the request's nonce. */
+    private fun staleThenOk(agentTime: Long, proven: Boolean) {
+        server.dispatcher = object : Dispatcher() {
+            var calls = 0
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                calls++
+                if (calls > 1) return json(200, WakeJson.encodeToString(StatusResponse.serializer(), status))
+                val proof = if (proven) staleProof(secret, request.headers[H_NONCE]!!, agentTime) else null
+                return json(401, WakeJson.encodeToString(ErrorBody.serializer(), ErrorBody("stale", agentTime, proof)))
+            }
+        }
+    }
+
     @Test
     fun retriesOnceWithAgentClockOffset(): Unit = runBlocking {
         val agentTime = now + 120_000
-        server.enqueue(json(401, WakeJson.encodeToString(ErrorBody.serializer(), ErrorBody("stale", agentTime))))
-        server.enqueue(json(200, WakeJson.encodeToString(StatusResponse.serializer(), status)))
+        staleThenOk(agentTime, proven = true)
 
         assertEquals(status, client.status())
         assertEquals(2, server.requestCount)
         server.takeRequest()
         val retried = headersOf(server.takeRequest())
         assertTrue(abs(retried.timestampMs - agentTime) < 1_000, "retry used ${retried.timestampMs}")
+    }
+
+    @Test
+    fun ignoresUnprovenStaleTime() {
+        staleThenOk(now + 36_000_000, proven = false)
+        val error = assertFailsWith<AgentRejected> { runBlocking { client.status() } }
+        assertEquals("stale", error.error)
+        assertEquals(1, server.requestCount)
     }
 
     @Test

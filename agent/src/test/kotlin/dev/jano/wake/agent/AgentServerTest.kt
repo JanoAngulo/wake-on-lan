@@ -9,7 +9,10 @@ import dev.jano.wake.protocol.ErrorBody
 import dev.jano.wake.protocol.H_NONCE
 import dev.jano.wake.protocol.H_SIGNATURE
 import dev.jano.wake.protocol.H_TIMESTAMP
-import dev.jano.wake.protocol.PairChallenge
+import dev.jano.wake.protocol.PairConfirmed
+import dev.jano.wake.protocol.PairOffer
+import dev.jano.wake.protocol.staleProof
+import kotlinx.serialization.json.jsonObject
 import dev.jano.wake.protocol.PairFinish
 import dev.jano.wake.protocol.PairStart
 import dev.jano.wake.protocol.StatusResponse
@@ -67,12 +70,13 @@ class AgentServerTest {
         body: String = "",
         signWith: ByteArray? = secret,
         at: Long = now,
+        nonce: String = dev.jano.wake.protocol.newNonce(),
     ): HttpResponse<String> {
         val bytes = body.toByteArray()
         val builder = HttpRequest.newBuilder(URI("http://127.0.0.1:${server.port}$path"))
             .method(method, if (bytes.isEmpty()) HttpRequest.BodyPublishers.noBody() else HttpRequest.BodyPublishers.ofByteArray(bytes))
         if (signWith != null) {
-            val h = sign(signWith, method, path, bytes, at)
+            val h = sign(signWith, method, path, bytes, at, nonce)
             builder.header(H_TIMESTAMP, h.timestampMs.toString()).header(H_NONCE, h.nonce).header(H_SIGNATURE, h.signature)
         }
         return http.send(builder.build(), HttpResponse.BodyHandlers.ofString())
@@ -121,13 +125,24 @@ class AgentServerTest {
     }
 
     @Test
-    fun staleRequestReturnsAgentTime() {
+    fun staleRequestReturnsProvenAgentTime() {
         paired()
-        val response = send("GET", "/status", at = now - 60_000)
+        val response = send("GET", "/status", at = now - 60_000, nonce = "n-stale")
         assertEquals(401, response.statusCode())
         val error = WakeJson.decodeFromString(ErrorBody.serializer(), response.body())
         assertEquals("stale", error.error)
         assertEquals(now, error.serverTimeMs)
+        assertEquals(staleProof(secret, "n-stale", now), error.proof)
+    }
+
+    @Test
+    fun forgedStaleRequestLearnsNothing() {
+        paired()
+        val response = send("GET", "/status", signWith = ByteArray(32) { 1 }, at = now - 60_000)
+        assertEquals(401, response.statusCode())
+        val error = WakeJson.decodeFromString(ErrorBody.serializer(), response.body())
+        assertEquals("bad_signature", error.error)
+        assertEquals(null, error.proof)
     }
 
     @Test
@@ -136,11 +151,29 @@ class AgentServerTest {
         assertEquals(409, send("POST", "/pair/start", body, signWith = null).statusCode())
     }
 
-    private fun startPairing(phonePub: String): PairChallenge {
+    private fun startPairing(phonePub: String): HttpResponse<String> {
         val body = WakeJson.encodeToString(PairStart.serializer(), PairStart(phonePub))
-        val response = send("POST", "/pair/start", body, signWith = null)
+        return send("POST", "/pair/start", body, signWith = null)
+    }
+
+    private fun offerOf(response: HttpResponse<String>): PairOffer {
         assertEquals(200, response.statusCode())
-        return WakeJson.decodeFromString(PairChallenge.serializer(), response.body())
+        return WakeJson.decodeFromString(PairOffer.serializer(), response.body())
+    }
+
+    @Test
+    fun pairStartRevealsNoCodeDerivedTag() {
+        pairing.begin()
+        val response = startPairing(encodePublic(generateX25519().public))
+        assertEquals(200, response.statusCode())
+        assertEquals(setOf("agentPublicKey"), WakeJson.parseToJsonElement(response.body()).jsonObject.keys)
+    }
+
+    @Test
+    fun secondStartWhileSessionOpenIsBusy() {
+        pairing.begin()
+        offerOf(startPairing(encodePublic(generateX25519().public)))
+        assertEquals(409, startPairing(encodePublic(generateX25519().public)).statusCode())
     }
 
     @Test
@@ -148,15 +181,16 @@ class AgentServerTest {
         val code = pairing.begin()
         val phone = generateX25519()
         val phonePub = encodePublic(phone.public)
-        val challenge = startPairing(phonePub)
-        val t = transcript(phonePub, challenge.agentPublicKey)
-        assertEquals(confirmTag(code, "agent", t), challenge.agentConfirm)
+        val offer = offerOf(startPairing(phonePub))
+        val t = transcript(phonePub, offer.agentPublicKey)
 
         val finish = PairFinish(phonePub, confirmTag(code, "phone", t))
         val response = send("POST", "/pair/finish", WakeJson.encodeToString(PairFinish.serializer(), finish), signWith = null)
-        assertEquals(204, response.statusCode())
+        assertEquals(200, response.statusCode())
+        val confirmed = WakeJson.decodeFromString(PairConfirmed.serializer(), response.body())
+        assertEquals(confirmTag(code, "agent", t), confirmed.agentConfirm)
 
-        val phoneSecret = deriveSecret(phone.private, decodePublic(challenge.agentPublicKey), t)
+        val phoneSecret = deriveSecret(phone.private, decodePublic(offer.agentPublicKey), t)
         assertContentEquals(phoneSecret, store.load())
         assertEquals(1, pairedCalls)
         assertEquals(null, pairing.activeCode())
@@ -166,14 +200,13 @@ class AgentServerTest {
     fun wrongCodeEndsPairing() {
         pairing.begin()
         val phonePub = encodePublic(generateX25519().public)
-        val challenge = startPairing(phonePub)
-        val t = transcript(phonePub, challenge.agentPublicKey)
+        val offer = offerOf(startPairing(phonePub))
+        val t = transcript(phonePub, offer.agentPublicKey)
         val finish = PairFinish(phonePub, confirmTag("000000", "phone", t))
         val response = send("POST", "/pair/finish", WakeJson.encodeToString(PairFinish.serializer(), finish), signWith = null)
         assertEquals(403, response.statusCode())
 
-        val again = WakeJson.encodeToString(PairStart.serializer(), PairStart(phonePub))
-        assertEquals(409, send("POST", "/pair/start", again, signWith = null).statusCode())
+        assertEquals(409, startPairing(phonePub).statusCode())
         assertEquals(null, store.load())
     }
 }

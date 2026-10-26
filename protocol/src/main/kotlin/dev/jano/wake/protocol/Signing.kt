@@ -47,6 +47,13 @@ fun sign(
     return SignedHeaders(nowMs, nonce, signature)
 }
 
+/**
+ * Proves a "stale" reply's clock came from the paired agent and answers this request's nonce,
+ * so nobody in the middle can push the phone into signing for a future time.
+ */
+fun staleProof(secret: ByteArray, nonce: String, serverTimeMs: Long): String =
+    b64url(hmacSha256(secret, "stale\n$nonce\n$serverTimeMs".toByteArray()))
+
 class RequestVerifier(
     private val secret: () -> ByteArray?,
     private val clock: () -> Long,
@@ -56,13 +63,13 @@ class RequestVerifier(
 
     fun verify(method: String, path: String, body: ByteArray, headers: SignedHeaders): VerifyResult {
         val key = secret() ?: return VerifyResult.NOT_PAIRED
-        val now = clock()
-        if (abs(now - headers.timestampMs) > maxSkewMs) return VerifyResult.STALE
-
+        // Signature before freshness: only the paired phone ever learns the agent's clock.
         val expected = sign(key, method, path, body, headers.timestampMs, headers.nonce).signature
         if (!MessageDigest.isEqual(expected.toByteArray(), headers.signature.toByteArray())) {
             return VerifyResult.BAD_SIGNATURE
         }
+        val now = clock()
+        if (abs(now - headers.timestampMs) > maxSkewMs) return VerifyResult.STALE
 
         synchronized(seenNonces) {
             seenNonces.entries.removeAll { now - it.value > 2 * maxSkewMs }

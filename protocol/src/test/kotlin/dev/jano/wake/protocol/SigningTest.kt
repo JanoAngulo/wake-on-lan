@@ -43,6 +43,21 @@ class SigningTest {
     }
 
     @Test
+    fun staleWithBadSignatureIsBadSignature() {
+        val forged = signed(at = now - 60_000).copy(signature = "AAAA")
+        assertEquals(VerifyResult.BAD_SIGNATURE, verifier.verify("POST", "/command", body, forged))
+    }
+
+    @Test
+    fun staleProofOnlyMatchesWithSecret() {
+        val proof = staleProof(secret, "n9", now)
+        assertEquals(proof, staleProof(secret, "n9", now))
+        assert(proof != staleProof(ByteArray(32), "n9", now))
+        assert(proof != staleProof(secret, "n9", now + 1))
+        assert(proof != staleProof(secret, "n8", now))
+    }
+
+    @Test
     fun replayRejected() {
         val headers = signed()
         assertEquals(VerifyResult.OK, verifier.verify("POST", "/command", body, headers))
