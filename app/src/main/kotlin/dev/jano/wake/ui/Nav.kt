@@ -79,7 +79,7 @@ fun WakeNavHost() {
     val setup by setupVm.state.collectAsStateWithLifecycle()
     val store by settingsVm.store.collectAsStateWithLifecycle()
     val homeBroadcast = remember {
-        graph.phoneNet.read().let { if (it.ip != null && it.prefixLength != null) broadcastOf(it.ip, it.prefixLength) else "192.168.1.255" }
+        graph.phoneNet.read().let { if (it.ip != null && it.prefixLength != null) broadcastOf(it.ip, it.prefixLength) else "255.255.255.255" }
     }
 
     LaunchedEffect(setup.paired) {

@@ -1,6 +1,6 @@
 # PC setup
 
-One-time setup on MY-PC so the phone can wake it, check on it, and send commands.
+One-time setup on your Windows PC so the phone can wake it, check on it, and send commands.
 
 ## 1. Check what's already set (safe, changes nothing)
 

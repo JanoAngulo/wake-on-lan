@@ -50,7 +50,7 @@ class SetupViewModel(private val graph: AppGraph) : ViewModel() {
 
     private fun homeBroadcast(): String {
         val net = graph.phoneNet.read()
-        return if (net.ip != null && net.prefixLength != null) broadcastOf(net.ip, net.prefixLength) else "192.168.1.255"
+        return if (net.ip != null && net.prefixLength != null) broadcastOf(net.ip, net.prefixLength) else "255.255.255.255"
     }
 
     fun find() {
@@ -73,7 +73,7 @@ class SetupViewModel(private val graph: AppGraph) : ViewModel() {
                     lastIp = reply.ip,
                     agentPort = reply.httpPort,
                     paired = true,
-                    broadcast = if (net.ip != null && net.prefixLength != null) broadcastOf(net.ip, net.prefixLength) else existing?.broadcast ?: "192.168.1.255",
+                    broadcast = if (net.ip != null && net.prefixLength != null) broadcastOf(net.ip, net.prefixLength) else existing?.broadcast ?: "255.255.255.255",
                     subnet = if (net.ip != null && net.prefixLength != null) subnetOf(net.ip, net.prefixLength) else existing?.subnet,
                 )
                 graph.secrets.put(device.id, secret)

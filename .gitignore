@@ -10,3 +10,6 @@ keystore.properties
 *.xapk
 *.exe
 .kotlin/
+
+# Local design-tool state
+.impeccable/

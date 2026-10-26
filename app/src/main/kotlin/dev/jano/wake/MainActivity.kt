@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
+import dev.jano.wake.net.broadcastOf
 import dev.jano.wake.net.discoverAgents
 import dev.jano.wake.net.probeHost
 import dev.jano.wake.net.readPhoneNet
@@ -30,11 +31,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Debug-only: proves this phone may reach the LAN (Android 17 local-network rules). */
+    /** Debug-only: proves this phone may reach the LAN (Android local-network rules). */
     private fun runNetworkCheck() = lifecycleScope.launch {
-        Log.i(DEBUG_TAG, "phone net: ${readPhoneNet(this@MainActivity)}")
-        Log.i(DEBUG_TAG, "discovery: ${runCatching { discoverAgents("192.168.1.255", 3_000) }}")
-        Log.i(DEBUG_TAG, "probe: ${runCatching { probeHost("192.168.1.14", listOf(47613, 135)) }}")
+        val net = readPhoneNet(this@MainActivity)
+        Log.i(DEBUG_TAG, "phone net: $net")
+        val broadcast = if (net.ip != null && net.prefixLength != null) broadcastOf(net.ip, net.prefixLength) else "255.255.255.255"
+        val replies = runCatching { discoverAgents(broadcast, 3_000) }
+        Log.i(DEBUG_TAG, "discovery: $replies")
+        replies.getOrNull()?.forEach { reply ->
+            Log.i(DEBUG_TAG, "probe ${reply.ip}: ${runCatching { probeHost(reply.ip, listOf(reply.httpPort, 135)) }}")
+        }
     }
 
     private companion object {

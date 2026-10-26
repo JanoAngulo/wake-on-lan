@@ -8,7 +8,7 @@ data class Device(
     val id: String,
     val name: String,
     val mac: String,
-    val broadcast: String = "192.168.1.255",
+    val broadcast: String = "255.255.255.255",
     val port: Int = Ports.WOL,
     val lastIp: String? = null,
     val subnet: String? = null,
