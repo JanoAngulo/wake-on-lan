@@ -31,6 +31,8 @@ data class StatusResponse(
     val agentVersion: String,
     val serverTimeMs: Long,
     val pending: PendingCommand? = null,
+    /** "Ethernet" or "Wi-Fi": how the PC is connected. */
+    val link: String? = null,
 )
 
 @Serializable

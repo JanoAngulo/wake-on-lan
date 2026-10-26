@@ -92,6 +92,7 @@ class AgentServer(
             agentVersion = info.version,
             serverTimeMs = clock(),
             pending = scheduler.pending(),
+            link = info.link,
         )
     }
 

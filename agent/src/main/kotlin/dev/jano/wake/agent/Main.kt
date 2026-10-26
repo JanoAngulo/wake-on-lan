@@ -29,7 +29,9 @@ internal fun networkAddress(ip: String, prefixLength: Int): String {
 /** One running pair of listeners, bound to the LAN adapter as it is right now. */
 private class Listeners(nic: NicInfo, scheduler: CommandScheduler, store: SecretStore, pairing: PairingMode, onPaired: () -> Unit) {
     val ip = nic.ipv4
-    private val info = { HostInfo(WindowsSystem.hostname(), nic.ipv4, nic.mac!!, WindowsSystem.uptimeSeconds(), AGENT_VERSION) }
+    private val info = {
+        HostInfo(WindowsSystem.hostname(), nic.ipv4, nic.mac!!, WindowsSystem.uptimeSeconds(), AGENT_VERSION, linkKind(nic.displayName))
+    }
     private val server = AgentServer(
         InetSocketAddress(nic.ipv4, Ports.HTTP), info, scheduler, store, pairing, System::currentTimeMillis, onPaired,
     )

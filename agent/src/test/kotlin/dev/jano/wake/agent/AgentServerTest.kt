@@ -95,6 +95,7 @@ class AgentServerTest {
         assertEquals("MY-PC", status.hostname)
         assertEquals(8040, status.uptimeSeconds)
         assertEquals(now, status.serverTimeMs)
+        assertEquals("Ethernet", status.link)
     }
 
     @Test
