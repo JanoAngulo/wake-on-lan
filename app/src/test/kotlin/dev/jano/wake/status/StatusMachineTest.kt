@@ -23,8 +23,36 @@ class StatusMachineTest {
     }
 
     @Test
-    fun startsOff() {
+    fun checkingUpGoesOn() {
+        up()
+        assertIs<PcState.On>(state)
+    }
+
+    @Test
+    fun checkingTwoDownsGoOff() {
+        down(1)
+        assertEquals(PcState.Checking, state)
+        down(1)
         assertEquals(PcState.Off(null), state)
+    }
+
+    @Test
+    fun restartingPollingRechecksOldState() {
+        turnOn()
+        machine.onPollingStarted()
+        assertEquals(PcState.Checking, state)
+    }
+
+    @Test
+    fun restartingPollingKeepsWakingTimer() {
+        machine.onWakeSent()
+        machine.onPollingStarted()
+        assertEquals(PcState.Waking(0), state)
+    }
+
+    @Test
+    fun startsChecking() {
+        assertEquals(PcState.Checking, state)
     }
 
     @Test

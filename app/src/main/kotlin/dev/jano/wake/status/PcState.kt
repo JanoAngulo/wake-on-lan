@@ -4,6 +4,8 @@ enum class StopKind { SHUTDOWN, REBOOT, SLEEP }
 
 /** What the app believes about the PC. Every transition is driven by evidence (probes, agent replies). */
 sealed interface PcState {
+    /** No fresh evidence yet (app just opened or came back): claim nothing until a probe answers. */
+    data object Checking : PcState
     data class Off(val sinceMs: Long?) : PcState
     data class Waking(val startedMs: Long) : PcState
     data class On(val uptimeSec: Long?, val latencyMs: Long, val steady: Boolean, val agent: Boolean) : PcState

@@ -19,10 +19,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -59,6 +64,15 @@ fun MainScreen(state: MainUiState, actions: MainActions, nowMs: () -> Long = Sys
         }
     }
     val enabled = Presentation.commandsEnabled(state)
+
+    // TalkBack hears each real state change once ("MY-PC is on"), never the ticking timer.
+    val view = LocalView.current
+    val announcement = Presentation.announcement(state)
+    var lastAnnounced by remember { mutableStateOf(announcement) }
+    LaunchedEffect(announcement) {
+        if (announcement != null && announcement != lastAnnounced) view.announceForAccessibility(announcement)
+        lastAnnounced = announcement
+    }
 
     Box(Modifier.fillMaxSize().background(WakeColors.Background)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -147,6 +161,7 @@ private fun ResponseValue(pc: PcState) {
                 Text("no reply", style = WakeType.RowSecondary, color = WakeColors.OnSurfaceMuted)
             }
             is PcState.Away -> Pill("Unknown", PillKind.NEUTRAL)
+            PcState.Checking -> Pill("Checking", PillKind.NEUTRAL)
         }
     }
 }

@@ -14,7 +14,7 @@ class StatusMachine(
     private val steadyMs: Long = 20,
     private val window: Int = 5,
 ) {
-    private val _state = MutableStateFlow<PcState>(PcState.Off(null))
+    private val _state = MutableStateFlow<PcState>(PcState.Checking)
     val state: StateFlow<PcState> = _state.asStateFlow()
 
     private var misses = 0
@@ -25,7 +25,20 @@ class StatusMachine(
     @Synchronized
     fun onWakeSent() {
         when (_state.value) {
-            is PcState.Off, is PcState.DidntWake -> _state.value = PcState.Waking(clock())
+            is PcState.Off, is PcState.DidntWake, PcState.Checking -> _state.value = PcState.Waking(clock())
+            else -> Unit
+        }
+    }
+
+    /** Polling (re)starts after the app was away: old On/Off may be hours stale, so check again. */
+    @Synchronized
+    fun onPollingStarted() {
+        when (_state.value) {
+            is PcState.On, is PcState.Off, is PcState.DidntWake -> {
+                misses = 0
+                rtts.clear()
+                _state.value = PcState.Checking
+            }
             else -> Unit
         }
     }
@@ -47,6 +60,11 @@ class StatusMachine(
             ProbeResult.Down -> {
                 misses++
                 lastHostUp = false
+                // From Checking there's no recent "on" to protect, so two misses are enough.
+                if (current == PcState.Checking && misses >= 2) {
+                    _state.value = PcState.Off(null)
+                    return
+                }
                 if (misses < missesForOff) return
                 _state.value = when (current) {
                     is PcState.On -> PcState.Off(clock())

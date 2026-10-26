@@ -78,7 +78,7 @@ class AppGraph(
                         override suspend fun cancel(id: String) = client.cancel(id)
                     }
                 },
-                discoverer = Discoverer { broadcast -> discoverAgents(broadcast) },
+                discoverer = Discoverer { broadcast -> discoverAgents(broadcast, timeoutMs = 1_500) },
                 phoneNet = PhoneNetReader { readPhoneNet(context) },
                 waker = Waker { mac, broadcast, port -> sendWake(mac, broadcast, port) },
                 pairer = PairingClient(http).let { client -> Pairer { url, code -> client.pair(url, code) } },

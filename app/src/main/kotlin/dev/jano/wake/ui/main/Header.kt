@@ -55,10 +55,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -89,7 +87,7 @@ fun heroStyleOf(pc: PcState): HeroStyle = when (pc) {
     is PcState.Off, is PcState.Waking -> HeroStyle.BUTTON
     is PcState.DidntWake -> HeroStyle.ERROR
     is PcState.On -> HeroStyle.INDICATOR
-    is PcState.Stopping, is PcState.Away -> HeroStyle.DIM
+    is PcState.Stopping, is PcState.Away, PcState.Checking -> HeroStyle.DIM
 }
 
 /** 0 = off header, 1 = fully lit; in-between states sit part way. */
@@ -191,9 +189,9 @@ fun Header(
                 style = WakeType.HeroCaption,
                 color = Color.White,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
+                // Not a live region: the waking timer changes every second. MainScreen announces
+                // state changes once instead (Presentation.announcement).
+                modifier = Modifier.padding(horizontal = 24.dp),
             )
         }
         Spacer(Modifier.height(52.dp))

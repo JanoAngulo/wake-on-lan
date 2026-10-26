@@ -22,6 +22,7 @@ object Presentation {
     fun caption(state: MainUiState, nowMs: Long): String {
         val paired = state.device?.paired == true
         return when (val pc = state.pc) {
+            PcState.Checking -> "Checking…"
             is PcState.Off -> "Tap to wake"
             is PcState.Waking -> "Waking up… ${((nowMs - pc.startedMs) / 1000).coerceAtLeast(0)}s"
             is PcState.On -> when {
@@ -42,6 +43,7 @@ object Presentation {
     fun heroDescription(state: MainUiState): String {
         val name = state.device?.name ?: "PC"
         return when (state.pc) {
+            PcState.Checking -> "$name status: checking"
             is PcState.Off, is PcState.DidntWake -> "Wake $name"
             is PcState.Waking -> "$name status: waking up"
             is PcState.On -> "$name status: on"
@@ -54,6 +56,7 @@ object Presentation {
         (state.pc as? PcState.On)?.agent == true && state.message !is UiMessage.Undo
 
     fun shutdownNote(state: MainUiState): String = when (val pc = state.pc) {
+        PcState.Checking -> "Checking"
         is PcState.Off, is PcState.DidntWake -> "PC is off"
         is PcState.Waking -> "Not yet"
         is PcState.Stopping -> "Sent"
@@ -63,6 +66,27 @@ object Presentation {
             state.device?.paired != true -> "Pair to use"
             !pc.agent -> "Needs agent"
             else -> "Hold 1s"
+        }
+    }
+
+    /**
+     * What TalkBack should say when the PC's state changes. Keyed on the kind of state only, so the
+     * waking timer, uptime and latency ticking never trigger a new announcement. Null = say nothing.
+     */
+    fun announcement(state: MainUiState): String? {
+        val name = state.device?.name ?: "PC"
+        return when (val pc = state.pc) {
+            PcState.Checking -> null
+            is PcState.Off -> "$name is off"
+            is PcState.Waking -> "$name is waking up"
+            is PcState.On -> if (pc.agent || state.device?.paired != true) "$name is on" else "$name is on, waiting for agent"
+            is PcState.Stopping -> when (pc.kind) {
+                StopKind.SHUTDOWN -> "$name is shutting down"
+                StopKind.REBOOT -> "$name is restarting"
+                StopKind.SLEEP -> "$name is going to sleep"
+            }
+            is PcState.DidntWake -> "$name didn't wake up"
+            is PcState.Away -> "Away from home. $name can't be reached."
         }
     }
 

@@ -15,8 +15,6 @@ import dev.jano.wake.status.StatusMachine
 import dev.jano.wake.status.StopKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,6 +36,9 @@ class MainViewModel(
     private val agentStatus = MutableStateFlow<StatusResponse?>(null)
     private val message = MutableStateFlow<UiMessage?>(null)
     private var downs = 0
+    private var agentMisses = 0
+    private var pollCount = 0
+    private var discovering = false
     private var undoJob: Job? = null
 
     val ui: StateFlow<MainUiState> = combine(graph.repository.store, machine.state, agentStatus, phone, message) { store, pc, status, net, msg ->
@@ -61,6 +62,7 @@ class MainViewModel(
     fun startPolling(scope: CoroutineScope): Job = scope.launch { runPolling() }
 
     suspend fun runPolling() {
+        machine.onPollingStarted()
         while (true) {
             pollOnce()
             delay(graph.repository.store.first().settings.pollMs)
@@ -68,6 +70,7 @@ class MainViewModel(
     }
 
     suspend fun pollOnce() {
+        pollCount++
         val device = graph.repository.store.first().selected ?: return
         val net = graph.phoneNet.read()
         phone.value = net
@@ -77,30 +80,37 @@ class MainViewModel(
 
         val ip = device.lastIp
         val secret = if (device.paired) graph.secrets.get(device.id) else null
-        val (host, status) = coroutineScope {
-            val host = async { ip?.let { graph.prober.probe(it, listOf(device.agentPort, WINDOWS_RPC_PORT)) } ?: ProbeResult.Down }
-            val status = async {
-                if (ip == null || secret == null) null
-                else runCatching { graph.agents.create(device, secret).status() }.getOrNull()
-            }
-            host.await() to status.await()
-        }
+        val host = ip?.let { graph.prober.probe(it, listOf(device.agentPort, WINDOWS_RPC_PORT)) } ?: ProbeResult.Down
+        // Ask the agent only when the PC answers at all, and only trust a reply from this PC's MAC.
+        val status = if (host is ProbeResult.Up && ip != null && secret != null) {
+            runCatching { graph.agents.create(device, secret).status() }.getOrNull()
+                ?.takeIf { parseMac(it.mac) == parseMac(device.mac) }
+        } else null
 
         if (status != null && status.ip != ip) graph.repository.updateIp(device.id, status.ip)
         machine.onProbe(host, status)
         agentStatus.value = status
 
         downs = if (host is ProbeResult.Down) downs + 1 else 0
-        if (downs >= 3 || ip == null) rediscover(device)
+        agentMisses = if (host is ProbeResult.Up && device.paired && status == null) agentMisses + 1 else 0
+        // Once per streak: before the 3rd miss would say Off, or when something else answers at that IP.
+        if (downs == 2 || agentMisses == 3 || (ip == null && pollCount % 5 == 1)) rediscover(device)
         machine.tick()
     }
 
-    /** The PC may have a new DHCP address; ask the agent where it is now. */
-    private suspend fun rediscover(device: Device) {
-        val reply = runCatching { graph.discoverer.discover(device.broadcast) }.getOrNull()
-            ?.firstOrNull { parseMac(it.mac) == parseMac(device.mac) } ?: return
-        if (reply.ip != device.lastIp) graph.repository.updateIp(device.id, reply.ip)
-        downs = 0
+    /** The PC may have a new DHCP address; ask the agent where it is now, without holding up polling. */
+    private fun rediscover(device: Device) {
+        if (discovering) return
+        discovering = true
+        viewModelScope.launch {
+            try {
+                val reply = runCatching { graph.discoverer.discover(device.broadcast) }.getOrNull()
+                    ?.firstOrNull { parseMac(it.mac) == parseMac(device.mac) }
+                if (reply != null && reply.ip != device.lastIp) graph.repository.updateIp(device.id, reply.ip)
+            } finally {
+                discovering = false
+            }
+        }
     }
 
     fun wake() {

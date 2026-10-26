@@ -60,6 +60,37 @@ class PresentationTest {
     }
 
     @Test
+    fun checkingClaimsNothing() {
+        val checking = state(PcState.Checking)
+        assertEquals("Checking…", Presentation.caption(checking, 0))
+        assertEquals("Checking", Presentation.shutdownNote(checking))
+        assertEquals("MY-PC status: checking", Presentation.heroDescription(checking))
+        assertFalse(Presentation.commandsEnabled(checking))
+    }
+
+    @Test
+    fun announcementsAreDiscreteStateChanges() {
+        assertEquals(null, Presentation.announcement(state(PcState.Checking)))
+        assertEquals("MY-PC is off", Presentation.announcement(state(PcState.Off(5))))
+        assertEquals("MY-PC is waking up", Presentation.announcement(state(PcState.Waking(1_000))))
+        assertEquals("MY-PC is on", Presentation.announcement(state(on)))
+        assertEquals("MY-PC is restarting", Presentation.announcement(state(PcState.Stopping(StopKind.REBOOT, 0))))
+        assertEquals("MY-PC didn't wake up", Presentation.announcement(state(PcState.DidntWake(0))))
+    }
+
+    @Test
+    fun announcementIgnoresTimerAndLatencyTicks() {
+        assertEquals(
+            Presentation.announcement(state(PcState.Waking(1_000))),
+            Presentation.announcement(state(PcState.Waking(9_000))),
+        )
+        assertEquals(
+            Presentation.announcement(state(on)),
+            Presentation.announcement(state(on.copy(latencyMs = 40, uptimeSec = 9_999))),
+        )
+    }
+
+    @Test
     fun heroDescriptionNamesTheAction() {
         assertEquals("Wake MY-PC", Presentation.heroDescription(state(PcState.Off(null))))
         assertEquals("MY-PC status: on", Presentation.heroDescription(state(on)))
