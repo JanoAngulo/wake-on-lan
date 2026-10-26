@@ -48,6 +48,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    implementation(libs.datastore.preferences)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(kotlin("test"))
