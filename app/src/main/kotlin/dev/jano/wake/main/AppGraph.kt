@@ -1,0 +1,88 @@
+package dev.jano.wake.main
+
+import android.content.Context
+import androidx.datastore.preferences.preferencesDataStore
+import dev.jano.wake.data.Device
+import dev.jano.wake.data.DeviceRepository
+import dev.jano.wake.data.SecretVault
+import dev.jano.wake.data.Secrets
+import dev.jano.wake.net.AgentClient
+import dev.jano.wake.net.PairingClient
+import dev.jano.wake.net.PhoneNet
+import dev.jano.wake.net.ProbeResult
+import dev.jano.wake.net.discoverAgents
+import dev.jano.wake.net.probeHost
+import dev.jano.wake.net.readPhoneNet
+import dev.jano.wake.net.sendWake
+import dev.jano.wake.protocol.Action
+import dev.jano.wake.protocol.CancelResponse
+import dev.jano.wake.protocol.CommandResponse
+import dev.jano.wake.protocol.DiscoveryReply
+import dev.jano.wake.protocol.MacAddress
+import dev.jano.wake.protocol.StatusResponse
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
+
+fun interface HostProber { suspend fun probe(ip: String, ports: List<Int>): ProbeResult }
+
+interface AgentApi {
+    suspend fun status(): StatusResponse
+    suspend fun command(action: Action): CommandResponse
+    suspend fun cancel(id: String): CancelResponse
+}
+
+fun interface AgentApiFactory { fun create(device: Device, secret: ByteArray): AgentApi }
+
+fun interface Discoverer { suspend fun discover(broadcast: String): List<DiscoveryReply> }
+
+fun interface PhoneNetReader { fun read(): PhoneNet }
+
+fun interface Waker { suspend fun send(mac: MacAddress, broadcast: String, port: Int) }
+
+fun interface Pairer { suspend fun pair(baseUrl: String, code: String): ByteArray }
+
+/** Everything the screens need, with real implementations in [create] and fakes in tests. */
+class AppGraph(
+    val repository: DeviceRepository,
+    val secrets: Secrets,
+    val prober: HostProber,
+    val agents: AgentApiFactory,
+    val discoverer: Discoverer,
+    val phoneNet: PhoneNetReader,
+    val waker: Waker,
+    val pairer: Pairer,
+) {
+    companion object {
+        private val Context.wakeStore by preferencesDataStore("wake")
+
+        @Volatile private var instance: AppGraph? = null
+
+        fun get(context: Context): AppGraph = instance ?: synchronized(this) {
+            instance ?: create(context.applicationContext).also { instance = it }
+        }
+
+        private fun create(context: Context): AppGraph {
+            val http = OkHttpClient.Builder()
+                .connectTimeout(2, TimeUnit.SECONDS)
+                .readTimeout(4, TimeUnit.SECONDS)
+                .build()
+            return AppGraph(
+                repository = DeviceRepository(context.wakeStore),
+                secrets = SecretVault(context),
+                prober = HostProber { ip, ports -> probeHost(ip, ports) },
+                agents = AgentApiFactory { device, secret ->
+                    val client = AgentClient(http, "http://${device.lastIp}:${device.agentPort}", secret, System::currentTimeMillis)
+                    object : AgentApi {
+                        override suspend fun status() = client.status()
+                        override suspend fun command(action: Action) = client.command(action)
+                        override suspend fun cancel(id: String) = client.cancel(id)
+                    }
+                },
+                discoverer = Discoverer { broadcast -> discoverAgents(broadcast) },
+                phoneNet = PhoneNetReader { readPhoneNet(context) },
+                waker = Waker { mac, broadcast, port -> sendWake(mac, broadcast, port) },
+                pairer = PairingClient(http).let { client -> Pairer { url, code -> client.pair(url, code) } },
+            )
+        }
+    }
+}
