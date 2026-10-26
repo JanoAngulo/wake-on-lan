@@ -46,8 +46,12 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.activity.compose)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockwebserver)
 }
