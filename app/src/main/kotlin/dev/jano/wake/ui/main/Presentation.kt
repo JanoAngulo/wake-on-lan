@@ -23,7 +23,7 @@ object Presentation {
         val paired = state.device?.paired == true
         return when (val pc = state.pc) {
             is PcState.Off -> "Tap to wake"
-            is PcState.Waking -> "Waking up… ${((nowMs - pc.startedMs) / 1000).coerceAtLeast(0)} s"
+            is PcState.Waking -> "Waking up… ${((nowMs - pc.startedMs) / 1000).coerceAtLeast(0)}s"
             is PcState.On -> when {
                 pc.agent && pc.uptimeSec != null -> "On for ${uptime(pc.uptimeSec)}"
                 paired -> "On, waiting for agent"
@@ -34,7 +34,7 @@ object Presentation {
                 StopKind.REBOOT -> "Restarting…"
                 StopKind.SLEEP -> "Going to sleep…"
             }
-            is PcState.DidntWake -> "No answer after 90 s"
+            is PcState.DidntWake -> "No answer after 90s"
             is PcState.Away -> "Away from home"
         }
     }
@@ -62,13 +62,13 @@ object Presentation {
             state.message is UiMessage.Undo -> "Sent"
             state.device?.paired != true -> "Pair to use"
             !pc.agent -> "Needs agent"
-            else -> "Hold 1 s"
+            else -> "Hold 1s"
         }
     }
 
     fun undoText(kind: StopKind, secondsLeft: Long): String = when (kind) {
-        StopKind.SHUTDOWN -> "Shutting down in $secondsLeft s"
-        StopKind.REBOOT -> "Restarting in $secondsLeft s"
+        StopKind.SHUTDOWN -> "Shutting down in ${secondsLeft}s"
+        StopKind.REBOOT -> "Restarting in ${secondsLeft}s"
         StopKind.SLEEP -> "Going to sleep"
     }
 }

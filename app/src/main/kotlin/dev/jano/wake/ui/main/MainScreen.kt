@@ -83,25 +83,28 @@ fun MainScreen(state: MainUiState, actions: MainActions, nowMs: () -> Long = Sys
                 KeyValueRow("Response", WakeIcons.Pulse) { ResponseValue(state.pc) }
             }
 
+            // Safe actions first, then the two forced ones grouped together with Shut down last.
             Column(
-                Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                HoldButton(
-                    label = "Shut down", icon = WakeIcons.Power, note = Presentation.shutdownNote(state),
-                    tapHint = "Hold to shut down", enabled = enabled, height = 68.dp,
-                    reducedMotion = reducedMotion, haptics = haptics,
-                    confirmQuestion = "Force shut down $name?", confirmLabel = "Shut down", onConfirm = actions.shutdown,
-                )
-                HoldButton(
-                    label = "Reboot", icon = WakeIcons.Reboot, note = "Hold 1 s",
-                    tapHint = "Hold to reboot", enabled = enabled, height = 60.dp,
-                    reducedMotion = reducedMotion, haptics = haptics,
-                    confirmQuestion = "Force reboot $name?", confirmLabel = "Reboot", onConfirm = actions.reboot,
-                )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     TapButton("Sleep", WakeIcons.Sleep, enabled, reducedMotion, haptics, actions.sleep, Modifier.weight(1f))
                     TapButton("Lock", WakeIcons.Lock, enabled, reducedMotion, haptics, actions.lock, Modifier.weight(1f))
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HoldButton(
+                        label = "Reboot", icon = WakeIcons.Reboot, note = "Hold 1s",
+                        tapHint = "Hold to reboot", enabled = enabled, height = 60.dp,
+                        reducedMotion = reducedMotion, haptics = haptics,
+                        confirmQuestion = "Force reboot $name?", confirmLabel = "Reboot", onConfirm = actions.reboot,
+                    )
+                    HoldButton(
+                        label = "Shut down", icon = WakeIcons.Power, note = Presentation.shutdownNote(state),
+                        tapHint = "Hold to shut down", enabled = enabled, height = 68.dp,
+                        reducedMotion = reducedMotion, haptics = haptics,
+                        confirmQuestion = "Force shut down $name?", confirmLabel = "Shut down", onConfirm = actions.shutdown,
+                    )
                 }
             }
 

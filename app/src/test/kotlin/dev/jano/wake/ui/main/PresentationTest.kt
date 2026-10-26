@@ -20,11 +20,11 @@ class PresentationTest {
     @Test
     fun captionsMatchSpec() {
         assertEquals("Tap to wake", Presentation.caption(state(PcState.Off(null)), 0))
-        assertEquals("Waking up… 18 s", Presentation.caption(state(PcState.Waking(1_000)), 19_000))
+        assertEquals("Waking up… 18s", Presentation.caption(state(PcState.Waking(1_000)), 19_000))
         assertEquals("On for 2h 14m", Presentation.caption(state(on), 0))
         assertEquals("On, waiting for agent", Presentation.caption(state(on.copy(agent = false, uptimeSec = null)), 0))
         assertEquals("Restarting…", Presentation.caption(state(PcState.Stopping(StopKind.REBOOT, 0)), 0))
-        assertEquals("No answer after 90 s", Presentation.caption(state(PcState.DidntWake(0)), 0))
+        assertEquals("No answer after 90s", Presentation.caption(state(PcState.DidntWake(0)), 0))
         assertEquals("Away from home", Presentation.caption(state(PcState.Away(null)), 0))
     }
 
@@ -38,7 +38,7 @@ class PresentationTest {
     fun shutdownNoteExplainsWhyDisabled() {
         assertEquals("PC is off", Presentation.shutdownNote(state(PcState.Off(null))))
         assertEquals("Not yet", Presentation.shutdownNote(state(PcState.Waking(0))))
-        assertEquals("Hold 1 s", Presentation.shutdownNote(state(on)))
+        assertEquals("Hold 1s", Presentation.shutdownNote(state(on)))
         assertEquals("Sent", Presentation.shutdownNote(state(on, UiMessage.Undo("c1", StopKind.SHUTDOWN, 0))))
         assertEquals("Needs agent", Presentation.shutdownNote(state(on.copy(agent = false))))
         assertEquals("Pair to use", Presentation.shutdownNote(state(on.copy(agent = false), paired = false)))
@@ -51,6 +51,12 @@ class PresentationTest {
         assertFalse(Presentation.commandsEnabled(state(on.copy(agent = false))))
         assertFalse(Presentation.commandsEnabled(state(on, UiMessage.Undo("c1", StopKind.SHUTDOWN, 0))))
         assertFalse(Presentation.commandsEnabled(state(PcState.Off(null))))
+    }
+
+    @Test
+    fun undoCountdownUsesCompactSeconds() {
+        assertEquals("Shutting down in 3s", Presentation.undoText(StopKind.SHUTDOWN, 3))
+        assertEquals("Restarting in 2s", Presentation.undoText(StopKind.REBOOT, 2))
     }
 
     @Test
