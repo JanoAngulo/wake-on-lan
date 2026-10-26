@@ -16,6 +16,13 @@ echo  Wake agent setup
 echo  ================
 echo.
 
+if exist "WakeAgent\WakeAgent.exe" (
+    rem Release download: the agent ships with its own Java runtime.
+    powershell -NoProfile -ExecutionPolicy Bypass -File "pc-setup\setup.ps1" -AgentDir "WakeAgent"
+    goto done
+)
+
+rem Source checkout: build the agent jar if needed and run it with the installed JDK 21.
 if not exist "agent\build\libs\wake-agent.jar" (
     echo Building the agent, this takes a minute...
     call gradlew.bat :agent:agentJar -q
@@ -26,8 +33,9 @@ if not exist "agent\build\libs\wake-agent.jar" (
         exit /b 1
     )
 )
-
 powershell -NoProfile -ExecutionPolicy Bypass -File "pc-setup\setup.ps1" -AgentJar "agent\build\libs\wake-agent.jar"
+
+:done
 if errorlevel 1 (
     echo.
     echo Setup stopped with an error. The message above says what went wrong.

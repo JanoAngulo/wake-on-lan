@@ -2,63 +2,75 @@
 
 Wake up, shut down, reboot, sleep and lock your Windows PC from your Android phone, over your home Wi-Fi.
 
-Wake is two small programs:
+## Download
 
-- **Wake for Android**: a dark, one-screen remote. Tap to wake the PC, hold to shut it down. It shows whether the PC is really on, how fast it answers, and when it has finished shutting down.
-- **Wake agent for Windows**: a tray app that runs when you log in and carries out shutdown, reboot, sleep and lock. It only accepts commands from the phone you paired with.
+From the [latest release](https://github.com/JanoAngulo/wake-on-lan/releases/latest):
 
-Waking uses standard Wake-on-LAN (a "magic packet"), so it works even when the PC is fully shut down and the agent isn't running.
-
-## Features
-
-- Wake from full shutdown or sleep with one tap
-- Hold-to-confirm shutdown and reboot, with a 3-second Undo
-- Live status: on, off, waking, shutting down, with response time and uptime
-- Finds your PC automatically: no typing MAC addresses
-- Pairing with a 6-digit code; every command is signed, and replays are rejected
-- Several PCs, folders and "Wake all"
-- Import and export your device list as JSON
-- TalkBack support, large-text support and reduced-motion support
-
-## What you need
-
-| | |
+| File | Install on |
 |---|---|
-| PC | Windows 10 or 11, **wired Ethernet recommended** (most Wi-Fi cards can't wake from shutdown), [JDK 21](https://adoptium.net/) |
-| Phone | Android 13 or newer |
-| Network | Phone and PC on the same home network |
+| **Wake.apk** | your Android phone (Android 13 or newer) |
+| **WakeAgent-Windows.zip** | your Windows 10/11 PC. Includes everything it needs, no Java install required |
 
-Wake only works on your home network. To wake the PC from outside, you'd need a VPN into your home network with another always-on device on it; that's not part of this project.
+## Set up (about 5 minutes)
 
-## Set up the PC
+### 1. On the PC
 
-1. **Turn on Wake-on-LAN in the BIOS/UEFI.** Look for "Wake on LAN", "Resume by PCI-E device" or "Power on by PCI-E", and turn **off** "ErP Ready" or "Deep sleep" if your board has it. The names differ between manufacturers.
-2. **Build the agent** (or download a release, if one is published):
-   ```bash
-   ./gradlew :agent:agentJar
-   ```
-3. **Double-click `Install Wake Agent.cmd`** and choose Yes when Windows asks for permission. The installer:
-   - turns on Wake on Magic Packet for your wired network adapter,
-   - turns off Windows Fast Startup, so Shut down is a real shutdown the PC can wake from,
-   - allows the agent through Windows Firewall for your local network only,
-   - starts the agent every time you log in.
+1. Unzip **WakeAgent-Windows.zip** anywhere, for example in Downloads.
+2. Double-click **Install Wake Agent.cmd** and choose **Yes** when Windows asks for permission.
+3. When it says **Done**, look for the **green power icon** in the system tray at the bottom right. Click the **^** arrow if it's hidden.
 
-   To see what it would change first, without changing anything:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File pc-setup\setup.ps1 -Check
-   ```
-4. Look for the **green power icon** in the system tray. Click the **^** arrow if it's hidden.
+The installer:
+- turns on Wake on Magic Packet for your wired network adapter,
+- turns off Windows Fast Startup, so Shut down is a real shutdown the PC can wake from,
+- allows the agent through Windows Firewall for your local network only,
+- starts the agent every time you log in.
 
-## Set up the phone
+You only do this once. Run it again to update; run **Uninstall Wake Agent.cmd** to remove everything.
 
-1. Build and install the app (see [Building](#building)), or install a release APK if one is published.
-2. Join the same Wi-Fi as the PC and open Wake. It searches for your PC.
+**Waking from shutdown also needs one BIOS/UEFI setting.** Restart, open the BIOS setup (usually Delete or F2 at startup), turn on **Wake on LAN** (sometimes called "Resume by PCI-E device" or "Power on by PCI-E"), and turn off **ErP Ready** or **Deep Sleep** if your board has it.
+
+### 2. On the phone
+
+1. Copy **Wake.apk** to the phone and open it. Allow installing from that source if Android asks.
+2. Connect the phone to the **same Wi-Fi** as the PC and open **Wake**. It finds your PC on its own.
 3. On the PC, right-click the green tray icon and choose **Pair phone…**. A 6-digit code appears for 2 minutes.
-4. In the app, pick your PC, type the code and tap **Pair**.
+4. In the app, tap your PC, type the code and tap **Pair**.
 
-The app has the same steps under **Settings → How to connect**.
+That's it. The same steps are in the app under **Settings → How to connect**.
 
-## How it works
+## What it does
+
+- **Wake** the PC from full shutdown or sleep with one tap
+- **Shut down and reboot** with hold-to-confirm and a 3-second Undo. These are forced, so open apps close.
+- **Sleep and lock** with one tap
+- **Live status**: on, off, waking, shutting down, with response time and uptime
+- **Several PCs**, folders and "Wake all"
+- **Import and export** your device list
+- Works with TalkBack, large text and reduced motion
+
+## Good to know
+
+- **Home network only.** The phone and PC must be on the same network.
+- **Use a network cable on the PC.** Most Wi-Fi cards can't wake a PC from shutdown.
+- **Log in after waking.** Waking works any time, but shut down, reboot, sleep and lock work once you're logged in on the PC, because the agent runs in your session.
+- **Only your phone can send commands.** Pairing uses a key exchange confirmed by the 6-digit code, and every command is signed. Other devices on your Wi-Fi can't shut your PC down.
+
+## Troubleshooting
+
+| Problem | Try this |
+|---|---|
+| The PC doesn't wake from shutdown | Check the BIOS setting above. On the PC, run `powershell -ExecutionPolicy Bypass -File pc-setup\setup.ps1 -Check` inside the unzipped folder; every line should say yes. |
+| "No PC answered" when searching | Make sure the green tray icon is there and the phone is on the same Wi-Fi. |
+| "On, waiting for agent" | The PC is on but nobody is logged in yet. Log in. |
+| Pairing fails | Start pairing again from the tray icon; the code lasts 2 minutes and works once. |
+
+The agent's log is at `%LOCALAPPDATA%\Wake\agent.log`.
+
+---
+
+## For developers
+
+### How it works
 
 ```
 Phone ──UDP broadcast, magic packet─────────▶ PC network card   (wake: works while the PC is off)
@@ -66,39 +78,32 @@ Phone ──UDP broadcast, discovery────────────▶ agen
 Phone ──HTTP, HMAC-signed requests──────────▶ agent             (status, shutdown, reboot, sleep, lock)
 ```
 
-- **Pairing:** an X25519 key exchange confirmed by the 6-digit code. The phone has to prove it knows the code before the agent sends anything derived from it, so nobody on the network can learn the code from the traffic.
-- **Commands** are signed with HMAC-SHA256 over the method, path, timestamp, a one-time nonce and the body. The agent rejects bad signatures, requests more than 30 seconds old and reused nonces.
-- **Shutdown and reboot** are forced, so open apps close. They run 3 seconds after the request, which is what makes Undo possible.
-- **Sleep** never hibernates. **Lock** needs the agent running in your logged-in session, which is why the agent starts at login rather than as a Windows service. Until you log in after waking the PC, only wake and status work.
+- **Pairing:** an X25519 key exchange confirmed by the 6-digit code. The phone proves the code first; the agent's proof comes back only afterwards, so the traffic gives nothing away for offline guessing.
+- **Commands:** HMAC-SHA256 over the method, path, timestamp, a one-time nonce and the body. The agent rejects bad signatures, requests more than 30 seconds old and reused nonces. Clock corrections are accepted only with an HMAC proof from the agent.
+- **Shutdown and reboot** run 3 seconds after the request, which is what makes Undo possible. **Sleep** never hibernates. **Lock** needs the agent running in the logged-in session.
+- **Ports:** UDP 9 (Wake-on-LAN), TCP 47613 (agent API), UDP 47614 (discovery). TCP 135 is only used to check that the PC is up.
 
-Ports used: UDP 9 (Wake-on-LAN), TCP 47613 (agent API), UDP 47614 (discovery). TCP 135 is only used to check that the PC is up.
-
-## Building
+### Building
 
 Requirements: JDK 21 and the Android SDK (platform 36). Gradle is included through the wrapper.
 
 ```bash
-./gradlew test                   # unit tests for every module
-./gradlew :agent:agentJar        # agent/build/libs/wake-agent.jar
-./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release.apk
-adb install -r app/build/outputs/apk/release/app-release.apk
+./gradlew test                    # unit tests for every module
+./gradlew :app:assembleRelease    # app/build/outputs/apk/release/app-release.apk
+./gradlew :agent:agentZip         # build/release/WakeAgent-Windows.zip (agent + bundled Java runtime)
+./gradlew :agent:agentJar         # agent/build/libs/wake-agent.jar (runs on an installed JDK 21)
 ```
 
-Release builds are signed with the keystore named in a `keystore.properties` file in the project root, which you create yourself and which is git-ignored. Without that file the release build uses the debug key. Details are in [docs/RUNBOOK.md](docs/RUNBOOK.md).
+Release builds are signed with the keystore named in a `keystore.properties` file in the project root, which you create yourself and which is git-ignored. Without it, the debug key is used. See [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
-## Project layout
+In a source checkout, **Install Wake Agent.cmd** builds and installs the jar version if the bundled `WakeAgent` folder isn't next to it.
+
+### Project layout
 
 | Path | What's in it |
 |---|---|
 | `protocol/` | Shared Kotlin: magic packet, wire messages, request signing, pairing crypto |
-| `agent/` | Windows agent: HTTP API, discovery, tray icon, power actions |
+| `agent/` | Windows agent: HTTP API, discovery, tray icon, power actions, packaging |
 | `app/` | Android app: Jetpack Compose UI, status logic, storage |
-| `pc-setup/` | PC setup script and notes |
+| `pc-setup/` | Install, update and uninstall script |
 | `docs/` | Design spec, implementation plan, clickable design prototype, runbook |
-
-## Troubleshooting
-
-- **The PC doesn't wake from shutdown.** Check the BIOS settings above and run `pc-setup\setup.ps1 -Check`. Every line should say yes.
-- **"No PC answered" when searching.** Make sure the green tray icon is there and that the phone is on the same network as the PC.
-- **"On, waiting for agent".** The PC is up but nobody is logged in yet. Log in and the commands become available.
-- **Agent log:** `%LOCALAPPDATA%\Wake\agent.log`.

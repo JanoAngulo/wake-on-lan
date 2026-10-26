@@ -37,3 +37,47 @@ tasks.register<Jar>("agentJar") {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/versions/9/module-info.class")
 }
+
+// Self-contained Windows agent: WakeAgent.exe plus a trimmed Java runtime (no JDK needed on the PC).
+// jdk.crypto.ec holds X25519 on Java 21; jdeps can't see it because it's loaded as a security provider.
+val agentImageDir = layout.buildDirectory.dir("agent-image")
+val agentImage = tasks.register<Exec>("agentImage") {
+    dependsOn("agentJar")
+    val jar = layout.buildDirectory.file("libs/wake-agent.jar")
+    inputs.file(jar)
+    outputs.dir(agentImageDir)
+    doFirst {
+        delete(agentImageDir)
+        val input = layout.buildDirectory.dir("jpackage-input").get().asFile
+        delete(input)
+        input.mkdirs()
+        jar.get().asFile.copyTo(input.resolve("wake-agent.jar"))
+    }
+    val jpackage = File(System.getProperty("java.home"), "bin/jpackage" + if (System.getProperty("os.name").startsWith("Windows")) ".exe" else "")
+    commandLine(
+        jpackage.path, "--type", "app-image",
+        "--name", "WakeAgent",
+        "--app-version", "1.0.0",
+        "--vendor", "Wake",
+        "--description", "Wake agent: shut down, reboot, sleep and lock this PC from your phone",
+        "--input", layout.buildDirectory.dir("jpackage-input").get().asFile.path,
+        "--main-jar", "wake-agent.jar",
+        "--main-class", "dev.jano.wake.agent.MainKt",
+        "--add-modules", "java.base,java.desktop,java.logging,jdk.httpserver,jdk.crypto.ec",
+        "--jlink-options", "--strip-debug --no-header-files --no-man-pages",
+        "--dest", agentImageDir.get().asFile.path,
+    )
+}
+
+// The download: unzip, double-click "Install Wake Agent.cmd".
+tasks.register<Zip>("agentZip") {
+    dependsOn(agentImage)
+    archiveFileName.set("WakeAgent-Windows.zip")
+    destinationDirectory.set(rootProject.layout.buildDirectory.dir("release"))
+    into("WakeAgent-Windows") {
+        from(agentImageDir)
+        from(rootProject.file("Install Wake Agent.cmd"))
+        from(rootProject.file("Uninstall Wake Agent.cmd"))
+        into("pc-setup") { from(rootProject.file("pc-setup/setup.ps1")) }
+    }
+}
