@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Power glyph centred in the 108dp adaptive icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,33 L54,52"
+        android:strokeWidth="5.5"
+        android:strokeColor="#FF7BE3AE"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M41.3,42.2 A19,19 0 1,0 66.7,42.2"
+        android:strokeWidth="5.5"
+        android:strokeColor="#FF7BE3AE"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

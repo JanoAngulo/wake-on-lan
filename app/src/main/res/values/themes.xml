@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wake_background">#FF0F1728</color>
+    <color name="ic_launcher_background">#FF1C2C55</color>
+
+    <style name="Theme.Wake" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/wake_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
