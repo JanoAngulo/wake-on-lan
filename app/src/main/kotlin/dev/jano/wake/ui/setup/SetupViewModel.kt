@@ -35,6 +35,15 @@ private val IPV4 = Regex("^((25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\
 
 fun isIpv4(text: String) = IPV4.matches(text.trim())
 
+/** Field rules shared by the form (on blur) and the save action. */
+fun validateDevice(name: String, mac: String, broadcast: String, port: String, ip: String): List<FieldError> = buildList {
+    if (name.isBlank()) add(FieldError(Field.NAME, "Enter a name"))
+    if (parseMac(mac) == null) add(FieldError(Field.MAC, "Enter a MAC like 0A:1B:2C:3D:4E:5F"))
+    if (!isIpv4(broadcast)) add(FieldError(Field.BROADCAST, "Enter an IPv4 address"))
+    if (port.trim().toIntOrNull() !in 1..65535) add(FieldError(Field.PORT, "Port must be 1–65535"))
+    if (ip.isNotBlank() && !isIpv4(ip)) add(FieldError(Field.IP, "Enter an IPv4 address"))
+}
+
 class SetupViewModel(private val graph: AppGraph) : ViewModel() {
     private val _state = MutableStateFlow(SetupUiState())
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
@@ -81,13 +90,7 @@ class SetupViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** Validates synchronously so errors show under the fields; saves in the background when valid. */
     fun saveManual(name: String, mac: String, broadcast: String, port: String, ip: String, existingId: String? = null): List<FieldError> {
-        val errors = buildList {
-            if (name.isBlank()) add(FieldError(Field.NAME, "Enter a name"))
-            if (parseMac(mac) == null) add(FieldError(Field.MAC, "Enter a MAC like 0A:1B:2C:3D:4E:5F"))
-            if (!isIpv4(broadcast)) add(FieldError(Field.BROADCAST, "Enter an IPv4 address"))
-            if (port.trim().toIntOrNull() !in 1..65535) add(FieldError(Field.PORT, "Port must be 1–65535"))
-            if (ip.isNotBlank() && !isIpv4(ip)) add(FieldError(Field.IP, "Enter an IPv4 address"))
-        }
+        val errors = validateDevice(name, mac, broadcast, port, ip)
         if (errors.isNotEmpty()) return errors
 
         viewModelScope.launch {

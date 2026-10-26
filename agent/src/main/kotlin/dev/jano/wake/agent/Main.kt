@@ -52,7 +52,7 @@ private class Listeners(nic: NicInfo, scheduler: CommandScheduler, store: Secret
     }
 }
 
-fun main() {
+fun main(args: Array<String>) {
     dataDir.mkdirs()
     val lock = RandomAccessFile(File(dataDir, "agent.lock"), "rw").channel.tryLock()
     if (lock == null) {
@@ -106,6 +106,8 @@ fun main() {
     tray.setPaired(store.load() != null)
 
     log("agent $AGENT_VERSION starting")
+    // Headless pairing: `--pair` opens pairing mode at startup and writes the code to the log.
+    if ("--pair" in args) log("pairing code: ${pairing.begin()}")
     // Re-check every 30 s so a new DHCP address or a late network doesn't leave the agent deaf.
     timer.scheduleWithFixedDelay({ runCatching { refreshListeners() }.onFailure { log("refresh failed: ${it.message}") } }, 0, 30, TimeUnit.SECONDS)
 }

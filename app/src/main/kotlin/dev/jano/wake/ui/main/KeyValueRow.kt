@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -27,10 +28,10 @@ import dev.jano.wake.ui.theme.WakeType
 
 /** Rounded card holding key-value rows separated by hairlines. */
 @Composable
-fun KeyValueCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun KeyValueCard(modifier: Modifier = Modifier, inset: Dp = 16.dp, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = modifier
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = inset)
             .fillMaxWidth()
             .background(WakeColors.Surface, WakeShapes.Card)
             .border(1.dp, WakeColors.Outline, WakeShapes.Card),

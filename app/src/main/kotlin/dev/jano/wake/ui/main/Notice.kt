@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.jano.wake.ui.theme.WakeColors
 import dev.jano.wake.ui.theme.WakeShapes
@@ -27,10 +28,10 @@ data class NoticeAction(val label: String, val onClick: () -> Unit)
 
 /** Yellow explanation shown when something needs the user's attention (spec §6). */
 @Composable
-fun Notice(icon: ImageVector, text: String, actions: List<NoticeAction> = emptyList(), modifier: Modifier = Modifier) {
+fun Notice(icon: ImageVector, text: String, actions: List<NoticeAction> = emptyList(), modifier: Modifier = Modifier, inset: Dp = 16.dp) {
     Row(
         modifier = modifier
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = inset)
             .fillMaxWidth()
             .background(WakeColors.NoticeContainer, WakeShapes.Notice)
             .border(1.dp, WakeColors.NoticeOutline, WakeShapes.Notice)
