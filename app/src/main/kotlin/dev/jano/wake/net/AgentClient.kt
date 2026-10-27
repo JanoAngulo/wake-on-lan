@@ -10,7 +10,11 @@ import dev.jano.wake.protocol.H_NONCE
 import dev.jano.wake.protocol.H_SIGNATURE
 import dev.jano.wake.protocol.H_TIMESTAMP
 import dev.jano.wake.protocol.StatusResponse
+import dev.jano.wake.protocol.UnlockRequest
+import dev.jano.wake.protocol.UnlockResponse
 import dev.jano.wake.protocol.WakeJson
+import dev.jano.wake.protocol.newNonce
+import dev.jano.wake.protocol.sealPassword
 import dev.jano.wake.protocol.sign
 import dev.jano.wake.protocol.staleProof
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +25,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 class AgentUnavailable(cause: Throwable) : IOException(cause)
 class AgentRejected(val error: String) : IOException("agent rejected request: $error")
@@ -39,30 +44,55 @@ class AgentClient(
 ) {
     @Volatile private var offsetMs = 0L
 
+    // The agent waits up to 15 s for Windows to answer an unlock.
+    private val unlockHttp by lazy { http.newBuilder().readTimeout(20, TimeUnit.SECONDS).build() }
+
     suspend fun status(): StatusResponse = call("GET", "/status", null, StatusResponse.serializer())
 
     suspend fun command(action: Action): CommandResponse =
-        call("POST", "/command", WakeJson.encodeToString(CommandRequest.serializer(), CommandRequest(action)), CommandResponse.serializer())
+        call("POST", "/command", fixed(WakeJson.encodeToString(CommandRequest.serializer(), CommandRequest(action))), CommandResponse.serializer())
 
     suspend fun cancel(id: String): CancelResponse =
-        call("POST", "/command/cancel", WakeJson.encodeToString(CancelRequest.serializer(), CancelRequest(id)), CancelResponse.serializer())
+        call("POST", "/command/cancel", fixed(WakeJson.encodeToString(CancelRequest.serializer(), CancelRequest(id))), CancelResponse.serializer())
 
-    private suspend fun <T> call(method: String, path: String, body: String?, serializer: KSerializer<T>): T =
+    /** Sealed per attempt: the ciphertext is bound to that attempt's nonce. */
+    suspend fun unlock(password: ByteArray): UnlockResponse =
+        call("POST", "/unlock", { nonce ->
+            WakeJson.encodeToString(UnlockRequest.serializer(), sealPassword(secret, nonce, password))
+        }, UnlockResponse.serializer(), unlockHttp)
+
+    private fun fixed(json: String): (String) -> String = { _ -> json }
+
+    private suspend fun <T> call(
+        method: String,
+        path: String,
+        body: ((nonce: String) -> String)?,
+        serializer: KSerializer<T>,
+        client: OkHttpClient = http,
+    ): T =
         withContext(Dispatchers.IO) {
             try {
-                execute(method, path, body, serializer)
+                execute(method, path, body, serializer, client)
             } catch (e: ClockCorrected) {
                 try {
-                    execute(method, path, body, serializer)
+                    execute(method, path, body, serializer, client)
                 } catch (again: ClockCorrected) {
                     throw AgentRejected("stale")
                 }
             }
         }
 
-    private fun <T> execute(method: String, path: String, body: String?, serializer: KSerializer<T>): T {
+    private fun <T> execute(
+        method: String,
+        path: String,
+        bodyFor: ((nonce: String) -> String)?,
+        serializer: KSerializer<T>,
+        client: OkHttpClient,
+    ): T {
+        val nonce = newNonce()
+        val body = bodyFor?.invoke(nonce)
         val bytes = body?.toByteArray() ?: ByteArray(0)
-        val headers = sign(secret, method, path, bytes, clock() + offsetMs)
+        val headers = sign(secret, method, path, bytes, clock() + offsetMs, nonce)
         val request = Request.Builder()
             .url(baseUrl + path)
             .method(method, body?.toRequestBody(JSON))
@@ -72,7 +102,7 @@ class AgentClient(
             .build()
 
         val response = try {
-            http.newCall(request).execute()
+            client.newCall(request).execute()
         } catch (e: IOException) {
             throw AgentUnavailable(e)
         }

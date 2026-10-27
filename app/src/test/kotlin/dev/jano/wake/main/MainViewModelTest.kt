@@ -2,6 +2,7 @@ package dev.jano.wake.main
 
 import dev.jano.wake.data.Device
 import dev.jano.wake.data.DeviceRepository
+import dev.jano.wake.data.FakeUnlockPasswords
 import dev.jano.wake.data.InMemoryPreferences
 import dev.jano.wake.data.Secrets
 import dev.jano.wake.net.PhoneNet
@@ -12,6 +13,8 @@ import dev.jano.wake.protocol.CommandResponse
 import dev.jano.wake.protocol.DiscoveryReply
 import dev.jano.wake.protocol.MacAddress
 import dev.jano.wake.protocol.StatusResponse
+import dev.jano.wake.protocol.UnlockResponse
+import dev.jano.wake.protocol.UnlockResult
 import dev.jano.wake.status.PcState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,19 +56,35 @@ class MainViewModelTest {
     private var discoveries = 0
     private var discoveryDelayMs = 0L
     private var agentMac = "0A:1B:2C:3D:4E:5F"
+    private var lockScreen: Boolean? = null
+    private var unlockCalls = 0
+    private val sentPasswords = mutableListOf<ByteArray>()
+    private var lastSentPassword: ByteArray? = null
+    private var unlockResult = UnlockResult.UNLOCKED
+    private var unlockError: Exception? = null
+    private var unlockGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     private val agentApi = object : AgentApi {
         override suspend fun status(): StatusResponse {
             statusCalls++
             if (!agentUp) throw java.io.IOException("down")
-            return StatusResponse("MY-PC", "192.168.1.14", agentMac, 60, "1.0", 0)
+            return StatusResponse("MY-PC", "192.168.1.14", agentMac, 60, "1.0", 0, lockScreen = lockScreen)
         }
         override suspend fun command(action: Action): CommandResponse {
             commands += action
             return if (action == Action.SHUTDOWN || action == Action.REBOOT) CommandResponse("c1", 3_000) else CommandResponse()
         }
         override suspend fun cancel(id: String) = CancelResponse(cancelResult)
+        override suspend fun unlock(password: ByteArray): UnlockResponse {
+            unlockCalls++
+            sentPasswords += password.copyOf()
+            lastSentPassword = password
+            unlockGate?.await()
+            unlockError?.let { throw it }
+            return UnlockResponse(unlockResult)
+        }
     }
+    private val passwords = FakeUnlockPasswords()
 
     private val graph = AppGraph(
         repository = repo,
@@ -84,6 +103,7 @@ class MainViewModelTest {
         phoneNet = PhoneNetReader { PhoneNet(true, "192.168.1.23", 24) },
         waker = Waker { mac, _, _ -> sentWakes += mac },
         pairer = Pairer { _, _ -> ByteArray(32) },
+        unlockPasswords = passwords,
     )
 
     private lateinit var vm: MainViewModel

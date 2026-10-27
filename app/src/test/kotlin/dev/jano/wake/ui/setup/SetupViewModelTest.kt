@@ -51,6 +51,7 @@ class SetupViewModelTest {
         phoneNet = PhoneNetReader { PhoneNet(true, "192.168.1.23", 24) },
         waker = Waker { _, _, _ -> },
         pairer = Pairer { _, _ -> pairResult() },
+        unlockPasswords = dev.jano.wake.data.FakeUnlockPasswords(),
     )
     private lateinit var vm: SetupViewModel
 

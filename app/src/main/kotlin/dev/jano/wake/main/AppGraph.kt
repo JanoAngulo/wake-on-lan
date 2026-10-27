@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.datastore.preferences.preferencesDataStore
 import dev.jano.wake.data.Device
 import dev.jano.wake.data.DeviceRepository
+import dev.jano.wake.data.KeystoreUnlockPasswords
 import dev.jano.wake.data.SecretVault
 import dev.jano.wake.data.Secrets
+import dev.jano.wake.data.UnlockPasswords
 import dev.jano.wake.net.AgentClient
 import dev.jano.wake.net.PairingClient
 import dev.jano.wake.net.PhoneNet
@@ -20,6 +22,7 @@ import dev.jano.wake.protocol.CommandResponse
 import dev.jano.wake.protocol.DiscoveryReply
 import dev.jano.wake.protocol.MacAddress
 import dev.jano.wake.protocol.StatusResponse
+import dev.jano.wake.protocol.UnlockResponse
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -29,6 +32,7 @@ interface AgentApi {
     suspend fun status(): StatusResponse
     suspend fun command(action: Action): CommandResponse
     suspend fun cancel(id: String): CancelResponse
+    suspend fun unlock(password: ByteArray): UnlockResponse
 }
 
 fun interface AgentApiFactory { fun create(device: Device, secret: ByteArray): AgentApi }
@@ -51,6 +55,7 @@ class AppGraph(
     val phoneNet: PhoneNetReader,
     val waker: Waker,
     val pairer: Pairer,
+    val unlockPasswords: UnlockPasswords,
 ) {
     companion object {
         private val Context.wakeStore by preferencesDataStore("wake")
@@ -76,12 +81,14 @@ class AppGraph(
                         override suspend fun status() = client.status()
                         override suspend fun command(action: Action) = client.command(action)
                         override suspend fun cancel(id: String) = client.cancel(id)
+                        override suspend fun unlock(password: ByteArray) = client.unlock(password)
                     }
                 },
                 discoverer = Discoverer { broadcast -> discoverAgents(broadcast, timeoutMs = 1_500) },
                 phoneNet = PhoneNetReader { readPhoneNet(context) },
                 waker = Waker { mac, broadcast, port -> sendWake(mac, broadcast, port) },
                 pairer = PairingClient(http).let { client -> Pairer { url, code -> client.pair(url, code) } },
+                unlockPasswords = KeystoreUnlockPasswords(context),
             )
         }
     }
