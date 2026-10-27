@@ -67,6 +67,24 @@ adb shell am start -S -n dev.jano.wake/.MainActivity --es demoState on        # 
 adb shell am start -S -n dev.jano.wake/.MainActivity --es debugAction discover  # logs discovery + probe under tag WakeDebug
 ```
 
+## Fingerprint unlock: recovery
+
+The unlock module only adds a "Wake" tile to the lock screen. The normal password and PIN tiles always stay, so if the Wake tile misbehaves, pick another sign-in option and sign in as usual, then run `credential-provider\tools\uninstall-dev.ps1` (or `setup.ps1 -Uninstall`) elevated.
+
+If the lock screen itself keeps crashing and you can't sign in:
+
+1. Hold Shift and click Restart (or interrupt boot three times) to reach Windows Recovery → Troubleshoot → Advanced options → Command Prompt.
+2. Remove the provider from the offline registry:
+
+   ```cmd
+   reg load HKLM\OFF C:\Windows\System32\config\SOFTWARE
+   reg delete "HKLM\OFF\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{8C5D3B0E-6A41-4C7E-9F2B-5D1A7E3C9B04}" /f
+   reg unload HKLM\OFF
+   ```
+
+   (In Recovery the Windows drive may not be `C:`; check with `dir D:\Windows` etc.) Renaming `C:\Program Files\Wake\WakeCredentialProvider.dll` also works.
+3. Restart. Sign in normally.
+
 ## Ports
 
 | Port | Use |
