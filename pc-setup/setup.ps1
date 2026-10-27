@@ -115,8 +115,14 @@ function Remove-UnlockModule {
 [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
 public static extern bool MoveFileEx(string existing, string replacement, int flags);
 '@
-        [void][Wake.Native]::MoveFileEx($UnlockTarget, $null, 4)  # MOVEFILE_DELAY_UNTIL_REBOOT
-        Write-Output "$UnlockTarget is in use; it will be deleted at the next reboot."
+        $dir = Split-Path $UnlockTarget
+        # MOVEFILE_DELAY_UNTIL_REBOOT; the then-empty folder goes with it.
+        if ([Wake.Native]::MoveFileEx($UnlockTarget, $null, 4)) {
+            [void][Wake.Native]::MoveFileEx($dir, $null, 4)
+            Write-Output "$UnlockTarget is in use; it will be deleted at the next reboot."
+        } else {
+            Write-Output "Couldn't remove $UnlockTarget (error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())). Delete it after a reboot."
+        }
     }
 }
 
