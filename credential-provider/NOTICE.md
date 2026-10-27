@@ -2,7 +2,9 @@
 
 The structure of this credential provider (the `ICredentialProvider` /
 `ICredentialProviderCredential2` shape, the field-descriptor tables, and the
-`KERB_INTERACTIVE_UNLOCK_LOGON` packing helpers in `Credential.cpp`) follows
+`KERB_INTERACTIVE_UNLOCK_LOGON` packing helpers in `UnlockLogon.cpp`, and the
+local versus Microsoft-account serialization and password protection in
+`Credential.cpp`) follows
 Microsoft's **Windows-classic-samples** `Samples/CredentialProvider` sample.
 The code here was written from the public `credentialprovider.h` API rather than
 copied, but it mirrors that sample closely enough that its licence is reproduced

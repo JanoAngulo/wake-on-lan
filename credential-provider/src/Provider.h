@@ -14,7 +14,8 @@ class Credential;
 
 // The credential provider LogonUI loads. Serves one tile, only for CPUS_UNLOCK_WORKSTATION, and
 // owns the pipe server that the agent talks to. Implements IUnlockSink so the pipe thread can push
-// a password in and trigger re-enumeration.
+// a password in and trigger re-enumeration. The tile is always listed (it shows the module is
+// loaded) but is the default, with auto-logon, only while a phone request is pending.
 class Provider : public ICredentialProvider, public ICredentialProviderSetUserArray, public IUnlockSink {
   public:
     Provider();
@@ -46,6 +47,11 @@ class Provider : public ICredentialProvider, public ICredentialProviderSetUserAr
 
   private:
     ~Provider();
+    // Starts the pipe once both Advise (events) and SetUserArray (SID) have happened, whichever
+    // comes last, and restarts it if the SID changed. Runs on LogonUI's thread.
+    HRESULT StartPipeIfReady();
+    // Stops the pipe, detaches it from the credential and drops any staged password.
+    void StopPipe();
 
     LONG ref_ = 1;
     CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus_ = CPUS_INVALID;
@@ -58,6 +64,7 @@ class Provider : public ICredentialProvider, public ICredentialProviderSetUserAr
 
     std::wstring userName_;
     std::wstring userSid_;
+    std::wstring pipeSid_;  // the SID the running pipe's DACL was built for (LogonUI's thread only)
     PipeServer pipe_;
 };
 

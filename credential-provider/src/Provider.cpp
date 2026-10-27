@@ -33,12 +33,26 @@ static HRESULT CopyFieldDescriptor(const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR& s
     return S_OK;
 }
 
+// Local account or not, from the user's identity provider (the PKEY_Identity_ProviderID value that
+// ICredentialProviderUser::GetProviderID returns), the same test Microsoft's sample makes. If
+// LogonUI can't say, fall back to the qualified name's prefix.
+static bool IsLocalUser(ICredentialProviderUser* user, const std::wstring& qualifiedName) {
+    GUID providerId{};
+    if (SUCCEEDED(user->GetProviderID(&providerId)))
+        return IsEqualGUID(providerId, Identity_LocalUserProvider) != FALSE;
+    return _wcsnicmp(qualifiedName.c_str(), L"MicrosoftAccount\\", 17) != 0 &&
+           _wcsnicmp(qualifiedName.c_str(), L"AzureAD\\", 8) != 0;
+}
+
 Provider::Provider() {
     WakeDllAddRef();
 }
 
 Provider::~Provider() {
-    pipe_.Stop();
+    try {
+        StopPipe();
+    } catch (...) {
+    }
     if (credential_) credential_->Release();
     if (events_) events_->Release();
     WakeDllRelease();
@@ -87,19 +101,53 @@ IFACEMETHODIMP Provider::SetSerialization(const CREDENTIAL_PROVIDER_CREDENTIAL_S
     return E_NOTIMPL;
 }
 
+HRESULT Provider::StartPipeIfReady() {
+    std::wstring sid;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (cpus_ != CPUS_UNLOCK_WORKSTATION || !events_ || !credential_ || userSid_.empty())
+            return S_OK;  // the other half (Advise or SetUserArray) has not happened yet
+        sid = userSid_;
+    }
+    if (pipe_.Running() && sid == pipeSid_) return S_OK;
+
+    StopPipe();
+    {
+        // Attach before the thread starts so a request that arrives at once is served.
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (credential_) credential_->AttachPipe(&pipe_);
+    }
+    // Start outside the lock: the pipe thread calls back into OnUnlockRequest, which takes it.
+    HRESULT hr = pipe_.Start(this, sid);
+    if (FAILED(hr)) {
+        StopPipe();
+        return hr;
+    }
+    pipeSid_ = sid;
+    return S_OK;
+}
+
+void Provider::StopPipe() {
+    pipe_.Stop();  // joins the pipe thread; mutex_ must not be held here
+    pipeSid_.clear();
+    std::lock_guard<std::mutex> lock(mutex_);
+    passwordPending_ = false;
+    if (credential_) {
+        credential_->DetachPipe();
+        credential_->ClearPassword();
+    }
+}
+
 IFACEMETHODIMP Provider::Advise(ICredentialProviderEvents* pcpe, UINT_PTR upAdviseContext) {
     try {
-        std::wstring sid;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (events_) events_->Release();
             events_ = pcpe;
             if (events_) events_->AddRef();
             adviseContext_ = upAdviseContext;
-            sid = userSid_;
         }
-        // Start the pipe outside the lock; it may call back in on its own thread.
-        return pipe_.Start(this, sid);
+        return StartPipeIfReady();
     } catch (...) {
         return E_UNEXPECTED;
     }
@@ -107,9 +155,8 @@ IFACEMETHODIMP Provider::Advise(ICredentialProviderEvents* pcpe, UINT_PTR upAdvi
 
 IFACEMETHODIMP Provider::UnAdvise() {
     try {
-        pipe_.Stop();  // stops and joins the pipe thread before we drop events_
+        StopPipe();  // stops and joins the pipe thread before we drop events_
         std::lock_guard<std::mutex> lock(mutex_);
-        passwordPending_ = false;
         if (events_) {
             events_->Release();
             events_ = nullptr;
@@ -147,10 +194,12 @@ IFACEMETHODIMP Provider::GetCredentialCount(DWORD* pdwCount, DWORD* pdwDefault,
     try {
         if (!pdwCount || !pdwDefault || !pbAutoLogonWithDefault) return E_POINTER;
         std::lock_guard<std::mutex> lock(mutex_);
+        // The tile is always listed so the user can see the module is loaded, but it takes the
+        // default from password, PIN or Hello only while a phone request is pending.
+        const bool pending = credential_ && passwordPending_ && pipe_.RequestPending();
         *pdwCount = credential_ ? 1 : 0;
-        *pdwDefault = credential_ ? 0 : CREDENTIAL_PROVIDER_NO_DEFAULT;
-        // Auto-submit only while a phone password is staged; otherwise the tile just sits there.
-        *pbAutoLogonWithDefault = (credential_ && passwordPending_) ? TRUE : FALSE;
+        *pdwDefault = pending ? 0 : CREDENTIAL_PROVIDER_NO_DEFAULT;
+        *pbAutoLogonWithDefault = pending ? TRUE : FALSE;
         return S_OK;
     } catch (...) {
         return E_UNEXPECTED;
@@ -174,6 +223,7 @@ IFACEMETHODIMP Provider::SetUserArray(ICredentialProviderUserArray* users) {
     try {
         if (!users) return E_INVALIDARG;
         std::wstring name, sid;
+        bool isLocal = true;
         DWORD count = 0;
         if (SUCCEEDED(users->GetCount(&count)) && count > 0) {
             ICredentialProviderUser* user = nullptr;
@@ -188,18 +238,23 @@ IFACEMETHODIMP Provider::SetUserArray(ICredentialProviderUserArray* users) {
                     sid = rawSid;
                     CoTaskMemFree(rawSid);
                 }
+                isLocal = IsLocalUser(user, name);
                 user->Release();
             }
         }
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        userName_ = name;
-        userSid_ = sid;
-        if (!credential_) {
-            credential_ = new (std::nothrow) Credential(userName_, userSid_, &pipe_);
-            if (!credential_) return E_OUTOFMEMORY;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            userName_ = name;
+            userSid_ = sid;
+            if (!credential_) {
+                credential_ = new (std::nothrow) Credential(userName_, userSid_, isLocal);
+                if (!credential_) return E_OUTOFMEMORY;
+            } else {
+                credential_->SetUser(userName_, userSid_, isLocal);
+            }
         }
-        return S_OK;
+        return StartPipeIfReady();
     } catch (...) {
         return E_UNEXPECTED;
     }

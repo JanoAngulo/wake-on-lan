@@ -1,15 +1,22 @@
 #include "Credential.h"
 
-#include <ntsecapi.h>
-#include <NTSecAPI.h>
+#include <wincred.h>
+
+#include <cstring>
+#include <vector>
 
 #include "Guids.h"
 #include "PipeServer.h"
+#include "UnlockLogon.h"
 
 // Tile bitmap, also referenced by resources.rc.
 #define IDB_TILE 101
 
 extern HINSTANCE g_hInst;  // set in Dll.cpp, used to load the tile bitmap
+
+// Keep the DLL loaded while a credential lives (defined in Dll.cpp).
+void WakeDllAddRef();
+void WakeDllRelease();
 
 namespace wake {
 
@@ -38,53 +45,14 @@ static HRESULT CopyString(PCWSTR src, LPWSTR* dst) {
     return S_OK;
 }
 
-// --- Kerberos unlock-logon packing (mirrors the Windows-classic-samples helpers) ---
-
-static void InitUnicode(UNICODE_STRING* u, PCWSTR s) {
-    size_t len = s ? wcslen(s) : 0;
-    u->Length = static_cast<USHORT>(len * sizeof(wchar_t));
-    u->MaximumLength = u->Length;
-    u->Buffer = const_cast<PWSTR>(s);
+static void Wipe(std::wstring& s) {
+    if (!s.empty()) SecureZeroMemory(&s[0], s.size() * sizeof(wchar_t));
+    s.clear();
 }
 
-// Copy src's bytes to *cursor and point dst->Buffer at the offset from base (what LSA expects).
-static void AppendRelative(UNICODE_STRING* dst, const UNICODE_STRING& src, BYTE* base, BYTE** cursor) {
-    dst->Length = src.Length;
-    dst->MaximumLength = src.Length;
-    if (src.Length) memcpy(*cursor, src.Buffer, src.Length);
-    dst->Buffer = reinterpret_cast<PWSTR>(*cursor - base);
-    *cursor += src.Length;
-}
-
-static HRESULT PackUnlockLogon(PCWSTR domain, PCWSTR user, const std::wstring& password, BYTE** prgb,
-                               DWORD* pcb) {
-    KERB_INTERACTIVE_UNLOCK_LOGON in{};
-    KERB_INTERACTIVE_LOGON* logon = &in.Logon;
-    logon->MessageType = KerbWorkstationUnlockLogon;
-    InitUnicode(&logon->LogonDomainName, domain);
-    InitUnicode(&logon->UserName, user);
-    logon->Password.Length = static_cast<USHORT>(password.size() * sizeof(wchar_t));
-    logon->Password.MaximumLength = logon->Password.Length;
-    logon->Password.Buffer = const_cast<PWSTR>(password.c_str());
-
-    DWORD cb = sizeof(in) + logon->LogonDomainName.Length + logon->UserName.Length +
-               logon->Password.Length;
-    BYTE* blob = static_cast<BYTE*>(CoTaskMemAlloc(cb));
-    if (!blob) return E_OUTOFMEMORY;
-
-    auto* out = reinterpret_cast<KERB_INTERACTIVE_UNLOCK_LOGON*>(blob);
-    ZeroMemory(&out->LogonId, sizeof(out->LogonId));
-    KERB_INTERACTIVE_LOGON* outLogon = &out->Logon;
-    outLogon->MessageType = logon->MessageType;
-
-    BYTE* cursor = blob + sizeof(in);
-    AppendRelative(&outLogon->LogonDomainName, logon->LogonDomainName, blob, &cursor);
-    AppendRelative(&outLogon->UserName, logon->UserName, blob, &cursor);
-    AppendRelative(&outLogon->Password, logon->Password, blob, &cursor);
-
-    *prgb = blob;
-    *pcb = cb;
-    return S_OK;
+static void Wipe(std::vector<wchar_t>& v) {
+    if (!v.empty()) SecureZeroMemory(v.data(), v.size() * sizeof(wchar_t));
+    v.clear();
 }
 
 static HRESULT LookupNegotiatePackage(ULONG* pkg) {
@@ -101,27 +69,88 @@ static HRESULT LookupNegotiatePackage(ULONG* pkg) {
     return st < 0 ? HRESULT_FROM_WIN32(LsaNtStatusToWinError(st)) : S_OK;
 }
 
-// Split "DOMAIN\user" (or "MicrosoftAccount\user@host") at the first backslash.
-static void SplitUserName(const std::wstring& qualified, std::wstring* domain, std::wstring* user) {
-    size_t slash = qualified.find(L'\\');
-    if (slash == std::wstring::npos) {
-        domain->clear();
-        *user = qualified;
-    } else {
-        *domain = qualified.substr(0, slash);
-        *user = qualified.substr(slash + 1);
+// The sample's ProtectIfNecessaryAndCopyPassword for the unlock scenario: CredProtect the password
+// unless it is already protected. Both buffers are NUL-terminated.
+static HRESULT ProtectIfNecessary(std::vector<wchar_t>& plain, std::vector<wchar_t>* out) {
+    const DWORD cchIn = static_cast<DWORD>(plain.size());  // includes the terminator, as CredProtect wants
+    if (cchIn <= 1) {
+        out->assign(1, L'\0');
+        return S_OK;
     }
+    CRED_PROTECTION_TYPE type = CredUnprotected;
+    if (CredIsProtectedW(plain.data(), &type) && type != CredUnprotected) {
+        *out = plain;
+        return S_OK;
+    }
+    DWORD cch = 0;
+    if (CredProtectW(FALSE, plain.data(), cchIn, nullptr, &cch, nullptr)) return E_UNEXPECTED;
+    DWORD err = GetLastError();
+    if (err != ERROR_INSUFFICIENT_BUFFER || cch == 0) return HRESULT_FROM_WIN32(err);
+    out->assign(cch, L'\0');
+    if (!CredProtectW(FALSE, plain.data(), cchIn, out->data(), &cch, nullptr)) {
+        err = GetLastError();
+        Wipe(*out);
+        return err ? HRESULT_FROM_WIN32(err) : E_FAIL;
+    }
+    return S_OK;
+}
+
+// Local account: KERB_INTERACTIVE_UNLOCK_LOGON (KerbWorkstationUnlockLogon) with a protected
+// password. The sample notes CredPackAuthenticationBuffer does not work for a local unlock.
+static HRESULT PackLocalUser(const std::wstring& qualifiedName, std::vector<wchar_t>& password,
+                             BYTE** prgb, DWORD* pcb) {
+    std::vector<wchar_t> protectedPassword;
+    HRESULT hr = ProtectIfNecessary(password, &protectedPassword);
+    if (FAILED(hr)) return hr;
+
+    std::wstring domain, user;
+    SplitUserName(qualifiedName, &domain, &user);
+    hr = PackUnlockLogon(domain, user, protectedPassword.data(),
+                         wcsnlen(protectedPassword.data(), protectedPassword.size()), prgb, pcb);
+    Wipe(protectedPassword);
+    return hr;
+}
+
+// Microsoft account, Azure AD or domain user: the sample's CredPackAuthenticationBuffer path with
+// the qualified user name (for example "MicrosoftAccount\user@example.com").
+static HRESULT PackProviderUser(const std::wstring& qualifiedName, std::vector<wchar_t>& password,
+                                BYTE** prgb, DWORD* pcb) {
+    std::vector<wchar_t> name(qualifiedName.size() + 1, L'\0');
+    if (!qualifiedName.empty())
+        memcpy(name.data(), qualifiedName.data(), qualifiedName.size() * sizeof(wchar_t));
+    const DWORD flags = CRED_PACK_PROTECTED_CREDENTIALS | CRED_PACK_ID_PROVIDER_CREDENTIALS;
+
+    DWORD cb = 0;
+    if (CredPackAuthenticationBufferW(flags, name.data(), password.data(), nullptr, &cb))
+        return E_UNEXPECTED;
+    DWORD err = GetLastError();
+    if (err != ERROR_INSUFFICIENT_BUFFER || cb == 0) return err ? HRESULT_FROM_WIN32(err) : E_FAIL;
+
+    const DWORD allocated = cb;
+    BYTE* blob = static_cast<BYTE*>(CoTaskMemAlloc(allocated));
+    if (!blob) return E_OUTOFMEMORY;
+    if (!CredPackAuthenticationBufferW(flags, name.data(), password.data(), blob, &cb)) {
+        err = GetLastError();
+        SecureZeroMemory(blob, allocated);
+        CoTaskMemFree(blob);
+        return err ? HRESULT_FROM_WIN32(err) : E_FAIL;
+    }
+    *prgb = blob;
+    *pcb = cb;
+    return S_OK;
 }
 
 // --- Credential ---
 
 Credential::Credential(const std::wstring& qualifiedUserName, const std::wstring& userSid,
-                       PipeServer* pipe)
-    : pipe_(pipe), userName_(qualifiedUserName), userSid_(userSid) {}
+                       bool isLocalUser)
+    : userName_(qualifiedUserName), userSid_(userSid), isLocalUser_(isLocalUser) {
+    WakeDllAddRef();
+}
 
 Credential::~Credential() {
-    if (!password_.empty())
-        SecureZeroMemory(&password_[0], password_.size() * sizeof(wchar_t));
+    Wipe(password_);
+    WakeDllRelease();
 }
 
 IFACEMETHODIMP Credential::QueryInterface(REFIID riid, void** ppv) {
@@ -158,10 +187,16 @@ IFACEMETHODIMP Credential::UnAdvise() {
     return S_OK;
 }
 
+bool Credential::RequestPendingLocked() const {
+    return !password_.empty() && pipe_ && pipe_->RequestPending();
+}
+
 IFACEMETHODIMP Credential::SetSelected(BOOL* pbAutoLogon) {
     try {
         if (!pbAutoLogon) return E_POINTER;
-        *pbAutoLogon = HasPassword() ? TRUE : FALSE;
+        std::lock_guard<std::mutex> lock(mutex_);
+        // Auto-submit only for a phone request in flight, never for a leftover password.
+        *pbAutoLogon = RequestPendingLocked() ? TRUE : FALSE;
         return S_OK;
     } catch (...) {
         return E_UNEXPECTED;
@@ -248,28 +283,33 @@ IFACEMETHODIMP Credential::GetSerialization(
     CREDENTIAL_PROVIDER_STATUS_ICON* pcpsiOptionalStatusIcon) {
     try {
         if (!pcpgsr || !pcpcs) return E_POINTER;
+        *pcpgsr = CPGSR_NO_CREDENTIAL_NOT_FINISHED;
+        ZeroMemory(pcpcs, sizeof(*pcpcs));
         if (ppwszOptionalStatusText) *ppwszOptionalStatusText = nullptr;
         if (pcpsiOptionalStatusIcon) *pcpsiOptionalStatusIcon = CPSI_NONE;
 
-        std::wstring password;
+        // Take the password out (single use): one phone request is serialized at most once.
+        std::vector<wchar_t> password;
+        std::wstring name;
+        bool isLocal = true;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            password = password_;
-            reported_ = false;
+            if (!RequestPendingLocked()) {
+                Wipe(password_);  // nothing in flight: no submission, stay on the tile
+                return S_OK;
+            }
+            password.assign(password_.size() + 1, L'\0');
+            memcpy(password.data(), password_.data(), password_.size() * sizeof(wchar_t));
+            Wipe(password_);
+            name = userName_;
+            isLocal = isLocalUser_;
         }
-        if (password.empty()) {
-            // No phone password yet: stay on the tile, no submission.
-            *pcpgsr = CPGSR_NO_CREDENTIAL_NOT_FINISHED;
-            return S_OK;
-        }
-
-        std::wstring domain, user;
-        SplitUserName(userName_, &domain, &user);
 
         BYTE* blob = nullptr;
         DWORD cb = 0;
-        HRESULT hr = PackUnlockLogon(domain.c_str(), user.c_str(), password, &blob, &cb);
-        SecureZeroMemory(&password[0], password.size() * sizeof(wchar_t));
+        HRESULT hr = isLocal ? PackLocalUser(name, password, &blob, &cb)
+                             : PackProviderUser(name, password, &blob, &cb);
+        Wipe(password);
         if (FAILED(hr)) return hr;
 
         ULONG authPackage = 0;
@@ -285,6 +325,11 @@ IFACEMETHODIMP Credential::GetSerialization(
         pcpcs->cbSerialization = cb;
         pcpcs->rgbSerialization = blob;  // LogonUI frees this with CoTaskMemFree
         *pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
+
+        // Windows now has the password: if the provider closes before ReportResult, the pipe
+        // tells the agent "provider closed" instead of going silent.
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (pipe_) pipe_->MarkSubmitted();
         return S_OK;
     } catch (...) {
         return E_UNEXPECTED;
@@ -298,14 +343,10 @@ IFACEMETHODIMP Credential::ReportResult(NTSTATUS ntsStatus, NTSTATUS ntsSubstatu
         if (ppwszOptionalStatusText) *ppwszOptionalStatusText = nullptr;
         if (pcpsiOptionalStatusIcon) *pcpsiOptionalStatusIcon = CPSI_NONE;
 
+        std::lock_guard<std::mutex> lock(mutex_);
         if (pipe_)
             pipe_->PostResult(static_cast<uint32_t>(ntsStatus), static_cast<uint32_t>(ntsSubstatus));
-
-        std::lock_guard<std::mutex> lock(mutex_);
-        reported_ = true;
-        if (!password_.empty())
-            SecureZeroMemory(&password_[0], password_.size() * sizeof(wchar_t));
-        password_.clear();
+        Wipe(password_);
         return S_OK;
     } catch (...) {
         return E_UNEXPECTED;
@@ -316,6 +357,7 @@ IFACEMETHODIMP Credential::GetUserSid(LPWSTR* ppwszSid) {
     try {
         if (!ppwszSid) return E_POINTER;
         *ppwszSid = nullptr;
+        std::lock_guard<std::mutex> lock(mutex_);
         if (userSid_.empty()) return E_NOTIMPL;  // let LogonUI fall back
         return CopyString(userSid_.c_str(), ppwszSid);
     } catch (...) {
@@ -325,21 +367,31 @@ IFACEMETHODIMP Credential::GetUserSid(LPWSTR* ppwszSid) {
 
 void Credential::SetPassword(const std::wstring& password) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!password_.empty())
-        SecureZeroMemory(&password_[0], password_.size() * sizeof(wchar_t));
+    Wipe(password_);
     password_ = password;
 }
 
 void Credential::ClearPassword() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!password_.empty())
-        SecureZeroMemory(&password_[0], password_.size() * sizeof(wchar_t));
-    password_.clear();
+    Wipe(password_);
 }
 
-bool Credential::HasPassword() {
+void Credential::SetUser(const std::wstring& qualifiedUserName, const std::wstring& userSid,
+                         bool isLocalUser) {
     std::lock_guard<std::mutex> lock(mutex_);
-    return !password_.empty();
+    userName_ = qualifiedUserName;
+    userSid_ = userSid;
+    isLocalUser_ = isLocalUser;
+}
+
+void Credential::AttachPipe(PipeServer* pipe) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pipe_ = pipe;
+}
+
+void Credential::DetachPipe() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pipe_ = nullptr;
 }
 
 }  // namespace wake

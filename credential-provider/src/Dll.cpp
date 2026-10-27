@@ -1,7 +1,9 @@
 #include <windows.h>
 #include <new>
 
-#include <initguid.h>  // makes DEFINE_GUID in Guids.h allocate CLSID_WakeCredentialProvider here
+#include <initguid.h>  // makes DEFINE_GUID allocate the GUIDs below in this file
+
+#include <credentialprovider.h>  // Identity_LocalUserProvider, used by Provider::SetUserArray
 
 #include "ClassFactory.h"
 #include "Guids.h"

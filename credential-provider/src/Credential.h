@@ -22,11 +22,13 @@ constexpr DWORD kFieldCount = 3;
 extern const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR kFieldDescriptors[kFieldCount];
 
 // The single tile shown while the lock screen is up. Holds the pending password and, when LogonUI
-// asks, packs it into a Kerberos unlock logon. Advertises itself as ICredentialProviderCredential2
-// so it carries the locked user's SID.
+// asks, packs it for the locked user: a KERB_INTERACTIVE_UNLOCK_LOGON for a local account,
+// CredPackAuthenticationBuffer for any other (Microsoft account, Azure AD, domain), as Microsoft's
+// sample does. Advertises itself as ICredentialProviderCredential2 so it carries the user's SID.
+// Holds a DLL reference for its whole life, so LogonUI can keep it after the provider is gone.
 class Credential : public ICredentialProviderCredential2 {
   public:
-    Credential(const std::wstring& qualifiedUserName, const std::wstring& userSid, PipeServer* pipe);
+    Credential(const std::wstring& qualifiedUserName, const std::wstring& userSid, bool isLocalUser);
 
     // IUnknown
     IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv) override;
@@ -62,22 +64,28 @@ class Credential : public ICredentialProviderCredential2 {
     // ICredentialProviderCredential2
     IFACEMETHODIMP GetUserSid(LPWSTR* ppwszSid) override;
 
-    // Called from the provider (pipe thread) to stage / drop the password. Thread-safe.
+    // Called from the provider to stage / drop the password and to update the user. Thread-safe.
     void SetPassword(const std::wstring& password);
     void ClearPassword();
-    bool HasPassword();
+    void SetUser(const std::wstring& qualifiedUserName, const std::wstring& userSid, bool isLocalUser);
+    // The provider attaches its running pipe server and detaches it (under our lock) before the
+    // server stops or goes away, so the credential never calls into a dead PipeServer.
+    void AttachPipe(PipeServer* pipe);
+    void DetachPipe();
 
   private:
     ~Credential();
+    // Caller holds mutex_. True while a phone request is in flight and its password is staged.
+    bool RequestPendingLocked() const;
 
     LONG ref_ = 1;
-    PipeServer* pipe_ = nullptr;  // not owned; outlives the credential
+
+    std::mutex mutex_;            // guards everything below (pipe thread vs LogonUI's thread)
+    PipeServer* pipe_ = nullptr;  // not owned
     std::wstring userName_;
     std::wstring userSid_;
-
-    std::mutex mutex_;              // guards password_ against the pipe thread vs LogonUI
+    bool isLocalUser_ = true;
     std::wstring password_;
-    bool reported_ = false;
 };
 
 }  // namespace wake
