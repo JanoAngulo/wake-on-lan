@@ -12,7 +12,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
-const val AGENT_VERSION = "1.0"
+const val AGENT_VERSION = "1.1"
 
 private val dataDir = File(System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"), "Wake")
 private val logFile = File(dataDir, "agent.log")
