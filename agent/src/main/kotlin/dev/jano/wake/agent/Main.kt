@@ -1,5 +1,7 @@
 package dev.jano.wake.agent
 
+import dev.jano.wake.agent.unlock.PipeUnlockRelay
+import dev.jano.wake.agent.unlock.WindowsPipeHost
 import dev.jano.wake.protocol.DiscoveryReply
 import dev.jano.wake.protocol.Ports
 import java.io.File
@@ -20,6 +22,9 @@ private fun log(message: String) {
     logFile.appendText("${LocalDateTime.now()} $message\n")
 }
 
+// Shared by every Listeners instance: there's one lock screen and one pipe, whatever the LAN address.
+private val unlockRelay = PipeUnlockRelay(WindowsPipeHost(), ::log)
+
 internal fun networkAddress(ip: String, prefixLength: Int): String {
     val mask = if (prefixLength == 0) 0 else -1 shl (32 - prefixLength)
     val n = ipv4ToInt(ip) and mask
@@ -33,7 +38,7 @@ private class Listeners(nic: NicInfo, scheduler: CommandScheduler, store: Secret
         HostInfo(WindowsSystem.hostname(), nic.ipv4, nic.mac!!, WindowsSystem.uptimeSeconds(), AGENT_VERSION, linkKind(nic.displayName))
     }
     private val server = AgentServer(
-        InetSocketAddress(nic.ipv4, Ports.HTTP), info, scheduler, store, pairing, System::currentTimeMillis, onPaired,
+        InetSocketAddress(nic.ipv4, Ports.HTTP), info, scheduler, store, pairing, System::currentTimeMillis, onPaired, unlockRelay,
     )
     private val discovery = DiscoveryResponder(Ports.DISCOVERY, networkAddress(nic.ipv4, nic.prefixLength) to nic.prefixLength) {
         val host = info()

@@ -26,7 +26,12 @@ import dev.jano.wake.protocol.encodePublic
 import dev.jano.wake.protocol.generateX25519
 import dev.jano.wake.protocol.staleProof
 import dev.jano.wake.protocol.transcript
+import dev.jano.wake.protocol.UnlockRequest
+import dev.jano.wake.protocol.UnlockResponse
+import dev.jano.wake.protocol.openPassword
+import dev.jano.wake.agent.unlock.UnlockRelay
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
 import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.security.MessageDigest
@@ -41,6 +46,7 @@ class AgentServer(
     private val pairing: PairingMode,
     private val clock: () -> Long,
     private val onPaired: () -> Unit,
+    private val unlock: UnlockRelay,
 ) {
     private class PairSession(val code: String, val phonePub: String, val agentKeys: KeyPair, val transcript: ByteArray)
 
@@ -78,6 +84,14 @@ class AgentServer(
                 val request = WakeJson.decodeFromString(CancelRequest.serializer(), body.decodeToString())
                 CancelResponse(scheduler.cancel(request.id)) to CancelResponse.serializer()
             }
+            "POST" to "/unlock" -> signed(exchange, body) {
+                val request = WakeJson.decodeFromString(UnlockRequest.serializer(), body.decodeToString())
+                // Signature already verified, so the nonce header is present and fresh.
+                val nonce = exchange.requestHeaders.getFirst(H_NONCE)!!
+                val password = openPassword(store.load()!!, nonce, request)
+                    ?: throw SerializationException("unlock password didn't open")
+                unlock.relay(password) to UnlockResponse.serializer()
+            }
             "POST" to "/pair/start" -> pairStart(exchange, body)
             "POST" to "/pair/finish" -> pairFinish(exchange, body)
             else -> error(exchange, 404, "not_found")
@@ -95,6 +109,7 @@ class AgentServer(
             serverTimeMs = clock(),
             pending = scheduler.pending(),
             link = info.link,
+            lockScreen = unlock.lockScreen(),
         )
     }
 

@@ -24,6 +24,11 @@ import dev.jano.wake.protocol.encodePublic
 import dev.jano.wake.protocol.generateX25519
 import dev.jano.wake.protocol.sign
 import dev.jano.wake.protocol.transcript
+import dev.jano.wake.protocol.UnlockRequest
+import dev.jano.wake.protocol.UnlockResponse
+import dev.jano.wake.protocol.UnlockResult
+import dev.jano.wake.protocol.sealPassword
+import dev.jano.wake.agent.unlock.UnlockRelay
 import java.net.InetSocketAddress
 import java.net.URI
 import java.net.http.HttpClient
@@ -47,6 +52,7 @@ class AgentServerTest {
     private val store = SecretStore(Files.createTempDirectory("wake-secret"))
     private val pairing = PairingMode({ now })
     private var pairedCalls = 0
+    private val relay = FakeRelay()
     private val server = AgentServer(
         bind = InetSocketAddress("127.0.0.1", 0),
         hostInfo = { HostInfo("MY-PC", "192.168.1.14", "0A:1B:2C:3D:4E:5F", 8040, "1.0") },
@@ -55,6 +61,7 @@ class AgentServerTest {
         pairing = pairing,
         clock = { now },
         onPaired = { pairedCalls++ },
+        unlock = relay,
     ).also { it.start() }
     private val http = HttpClient.newHttpClient()
 
@@ -208,5 +215,60 @@ class AgentServerTest {
 
         assertEquals(409, startPairing(phonePub).statusCode())
         assertEquals(null, store.load())
+    }
+
+    private class FakeRelay : UnlockRelay {
+        var lockScreen: Boolean? = null
+        val received = mutableListOf<ByteArray>()
+        override fun lockScreen() = lockScreen
+        override fun relay(passwordUtf8: ByteArray): UnlockResponse {
+            received += passwordUtf8.copyOf()
+            passwordUtf8.fill(0)
+            return UnlockResponse(UnlockResult.UNLOCKED)
+        }
+    }
+
+    private fun unlockBody(sealFor: String) =
+        WakeJson.encodeToString(UnlockRequest.serializer(), sealPassword(secret, sealFor, "pässwörd".toByteArray()))
+
+    @Test
+    fun unlockRelaysDecryptedPassword() {
+        paired()
+        val response = send("POST", "/unlock", unlockBody("n-1"), nonce = "n-1")
+        assertEquals(200, response.statusCode())
+        assertEquals(UnlockResult.UNLOCKED, WakeJson.decodeFromString(UnlockResponse.serializer(), response.body()).result)
+        assertContentEquals("pässwörd".toByteArray(), relay.received.single())
+    }
+
+    @Test
+    fun unlockRequiresSignature() {
+        paired()
+        assertEquals(401, send("POST", "/unlock", unlockBody("n-1"), signWith = null, nonce = "n-1").statusCode())
+        assertTrue(relay.received.isEmpty())
+    }
+
+    @Test
+    fun unlockReplayRejected() {
+        paired()
+        assertEquals(200, send("POST", "/unlock", unlockBody("n-1"), nonce = "n-1").statusCode())
+        val replay = send("POST", "/unlock", unlockBody("n-1"), nonce = "n-1")
+        assertEquals(401, replay.statusCode())
+        assertEquals("replay", WakeJson.decodeFromString(ErrorBody.serializer(), replay.body()).error)
+        assertEquals(1, relay.received.size)
+    }
+
+    @Test
+    fun unlockWithCiphertextForOtherNonceIs400() {
+        paired()
+        assertEquals(400, send("POST", "/unlock", unlockBody("n-1"), nonce = "n-2").statusCode())
+        assertTrue(relay.received.isEmpty())
+    }
+
+    @Test
+    fun statusReportsLockScreen() {
+        paired()
+        relay.lockScreen = true
+        val response = send("GET", "/status")
+        assertTrue(response.body().contains("\"lockScreen\":true"), response.body())
     }
 }
