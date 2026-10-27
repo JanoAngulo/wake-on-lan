@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.navigation.compose)
+    implementation(libs.androidx.biometric)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(kotlin("test"))

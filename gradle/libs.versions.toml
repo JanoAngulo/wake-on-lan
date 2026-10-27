@@ -11,6 +11,7 @@ datastore = "1.1.7"
 okhttp = "5.1.0"
 jna = "5.17.0"
 junit = "4.13.2"
+biometric = "1.1.0"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
@@ -33,6 +34,7 @@ mockwebserver = { module = "com.squareup.okhttp3:mockwebserver3", version.ref = 
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 junit = { module = "junit:junit", version.ref = "junit" }
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
