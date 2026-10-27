@@ -63,7 +63,7 @@ Pairing again replaces the old secret, and only one phone can be paired at a tim
 These work only in debug builds (`./gradlew :app:installDebug`):
 
 ```bash
-adb shell am start -S -n dev.jano.wake/.MainActivity --es demoState on        # off|waking|on|undo|stopping|didntwake|away|noagent
+adb shell am start -S -n dev.jano.wake/.MainActivity --es demoState on        # off|waking|on|undo|stopping|didntwake|away|noagent|locked|unlocking
 adb shell am start -S -n dev.jano.wake/.MainActivity --es debugAction discover  # logs discovery + probe under tag WakeDebug
 ```
 

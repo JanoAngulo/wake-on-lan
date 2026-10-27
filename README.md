@@ -1,6 +1,6 @@
 # Wake
 
-Wake up, shut down, reboot, sleep and lock your Windows PC from your Android phone, over your home Wi-Fi.
+Wake up, shut down, reboot, sleep and lock your Windows PC from your Android phone, over your home Wi-Fi. Optionally, unlock it with your phone's fingerprint sensor.
 
 ## Download
 
@@ -67,7 +67,8 @@ Have more than one PC? Tap the PC name at the top to switch, or use **Settings**
 - **Wake** the PC from full shutdown or sleep with one tap
 - **Shut down and reboot** with hold-to-confirm and a 3-second Undo. These are forced, so open apps close.
 - **Sleep and lock** with one tap
-- **Live status**: on, off, waking, shutting down, with response time and uptime
+- **Unlock with your fingerprint** (optional): the locked PC signs you in without typing your password
+- **Live status**: on, off, waking, locked, shutting down, with response time and uptime
 - **Several PCs**, folders and "Wake all"
 - **Import and export** your device list
 - Works with TalkBack, large text and reduced motion
@@ -83,11 +84,31 @@ Have more than one PC? Tap the PC name at the top to switch, or use **Settings**
 
 When the PC is locked (after Lock, or after waking from sleep), tap **Unlock** in Wake and touch the fingerprint sensor. The PC unlocks without you typing anything.
 
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/screenshots/locked.png" alt="PC is on and locked. A Locked badge sits next to On for 2h 14m, and the Lock button has become a highlighted Unlock button with a fingerprint icon." width="200"></td>
+    <td align="center" width="25%"><img src="docs/screenshots/unlocking.png" alt="After the fingerprint is accepted, the button shows a spinner and says Unlocking." width="200"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>1. Locked: tap Unlock</b></td>
+    <td align="center"><b>2. Touch the sensor, it unlocks</b></td>
+  </tr>
+</table>
+
 - **Turn it on:** run **Install Wake Agent.cmd** and answer `y` to *Turn on fingerprint unlock?* It adds a "Wake" option to the lock screen. Your usual password and PIN options stay.
 - **On the phone:** Settings → your PC → **Fingerprint unlock**. Enter the Windows password once: your Microsoft account or local account password, **not the PIN**.
 - **Where the password lives:** only on the phone, locked by your fingerprint (the phone's PIN works as backup). It's sent to the PC encrypted and never saved there.
 - **Not after a restart.** It unlocks a locked session. After a shutdown or reboot, sign in on the PC as usual.
 - If the PC rejects the saved password (you changed it), Wake deletes it and asks again. It never retries on its own, so it can't lock your account.
+
+It needs two Windows settings:
+
+- **"Only allow Windows Hello sign-in for Microsoft accounts" must be off** (Settings → Accounts → Sign-in options). When it's on, Windows hides every sign-in option except Windows Hello, Wake included. `setup.ps1 -Check` tells you if it's on.
+- **Your Microsoft account needs a password.** A passwordless account has no password to send, so turn passwordless off at account.microsoft.com → Security.
+
+After a reboot you'll also see the Wake option on the sign-in screen. It's never picked by default and does nothing there, so sign in as usual.
+
+To remove it, run **Uninstall Wake Agent.cmd**. If Windows is still using the file, it's deleted on the next restart.
 
 ## Troubleshooting
 
@@ -97,6 +118,9 @@ When the PC is locked (after Lock, or after waking from sleep), tap **Unlock** i
 | "No PC answered" when searching | Make sure the green tray icon is there and the phone is on the same Wi-Fi. |
 | "On, waiting for agent" | The PC is on but nobody is logged in yet. Log in. |
 | Pairing fails | Start pairing again from the tray icon; the code lasts 2 minutes and works once. |
+| No **Unlock** button, or "Install the unlock module on the PC first" | Run **Install Wake Agent.cmd** again and answer `y` to *Turn on fingerprint unlock?* |
+| No Wake option on the lock screen | Turn off "only allow Windows Hello sign-in" (see [Fingerprint unlock](#fingerprint-unlock-optional)). |
+| "Couldn't save" when saving the password | Set up a screen lock and at least one fingerprint on the phone first. |
 
 The agent's log is at `%LOCALAPPDATA%\Wake\agent.log`.
 
@@ -110,11 +134,13 @@ The agent's log is at `%LOCALAPPDATA%\Wake\agent.log`.
 Phone ──UDP broadcast, magic packet─────────▶ PC network card   (wake: works while the PC is off)
 Phone ──UDP broadcast, discovery────────────▶ agent             (find PC: name, IP, MAC)
 Phone ──HTTP, HMAC-signed requests──────────▶ agent             (status, shutdown, reboot, sleep, lock)
+Phone ──HTTP, signed + encrypted /unlock────▶ agent ──named pipe──▶ credential provider DLL ──▶ lock screen
 ```
 
 - **Pairing:** an X25519 key exchange confirmed by the 6-digit code. The phone proves the code first; the agent's proof comes back only afterwards, so the traffic gives nothing away for offline guessing.
 - **Commands:** HMAC-SHA256 over the method, path, timestamp, a one-time nonce and the body. The agent rejects bad signatures, requests more than 30 seconds old and reused nonces. Clock corrections are accepted only with an HMAC proof from the agent.
 - **Shutdown and reboot** run 3 seconds after the request, which is what makes Undo possible. **Sleep** never hibernates. **Lock** needs the agent running in the logged-in session.
+- **Unlock:** the phone's Android Keystore releases the password only after a fingerprint (or the phone's PIN). The password is AES-GCM encrypted with a key derived from the pairing secret through HKDF, and the ciphertext is bound to the request's nonce. The agent decrypts it and passes it over `\\.\pipe\wake-unlock` to `WakeCredentialProvider.dll`, a Windows credential provider that LogonUI loads as SYSTEM. It submits the password and reports Windows' answer back. The agent only writes to the pipe if SYSTEM owns it. The DLL does no networking, stores nothing on disk and sits in `C:\Program Files\Wake`, where only administrators can write.
 - **Ports:** UDP 9 (Wake-on-LAN), TCP 47613 (agent API), UDP 47614 (discovery). TCP 135 is only used to check that the PC is up.
 
 ### Building
@@ -139,6 +165,7 @@ In a source checkout, **Install Wake Agent.cmd** builds and installs the jar ver
 |---|---|
 | `protocol/` | Shared Kotlin: magic packet, wire messages, request signing, pairing crypto |
 | `agent/` | Windows agent: HTTP API, discovery, tray icon, power actions, packaging |
-| `app/` | Android app: Jetpack Compose UI, status logic, storage |
+| `app/` | Android app: Jetpack Compose UI, status logic, storage, fingerprint-gated password |
+| `credential-provider/` | C++ Windows credential provider for fingerprint unlock, with its tests |
 | `pc-setup/` | Install, update and uninstall script |
 | `docs/` | Design spec, implementation plan, clickable design prototype, runbook |
