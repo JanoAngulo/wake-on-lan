@@ -27,6 +27,8 @@ object DemoStates {
             "didntwake" -> state(PcState.DidntWake(now), agent = null)
             "away" -> state(PcState.Away(PcState.Off(null)), phone = PhoneNet(false, "10.12.0.4", 16), agent = null)
             "noagent" -> state(on.copy(latencyMs = 3, uptimeSec = null, agent = false), agent = null)
+            "locked" -> state(on, agent = status.copy(lockScreen = true)).copy(lockScreen = true, unlockSaved = true)
+            "unlocking" -> state(on, agent = status.copy(lockScreen = true)).copy(lockScreen = true, unlockSaved = true, unlocking = true)
             else -> null
         }
     }

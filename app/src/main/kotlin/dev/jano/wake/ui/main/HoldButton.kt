@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -168,19 +169,36 @@ fun HoldButton(
 
 /** Neutral tap action (Sleep, Lock). */
 @Composable
-fun TapButton(label: String, icon: ImageVector, enabled: Boolean, reducedMotion: Boolean, haptics: Haptics, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun TapButton(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    reducedMotion: Boolean,
+    haptics: Haptics,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+    busy: Boolean = false,
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && !reducedMotion) 0.98f else 1f, tween(Motion.PRESS_MS), label = "press")
-    val content = if (enabled) WakeColors.OnSurface else WakeColors.OnSurfaceMuted
+    val active = enabled && !busy
+    // Primary: the one action that matters right now (Unlock while the lock screen is up).
+    val filled = primary && active
+    val content = when {
+        filled -> WakeColors.Background
+        active -> WakeColors.OnSurface
+        else -> WakeColors.OnSurfaceMuted
+    }
     Row(
         modifier = modifier
             .scale(scale)
             .heightIn(min = 60.dp)
             .clip(WakeShapes.Button)
-            .background(WakeColors.Surface)
-            .border(1.dp, WakeColors.Outline, WakeShapes.Button)
-            .clickable(interaction, ripple(), enabled = enabled, role = Role.Button) {
+            .background(if (filled) WakeColors.HeroDisc else WakeColors.Surface)
+            .border(1.dp, if (filled) WakeColors.HeroDisc else WakeColors.Outline, WakeShapes.Button)
+            .clickable(interaction, ripple(), enabled = active, role = Role.Button) {
                 haptics.press()
                 onClick()
             }
@@ -188,7 +206,11 @@ fun TapButton(label: String, icon: ImageVector, enabled: Boolean, reducedMotion:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+        if (busy) {
+            CircularProgressIndicator(Modifier.size(20.dp), color = WakeColors.OnSurface, strokeWidth = 2.dp)
+        } else {
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+        }
         Text(label, style = WakeType.Button, color = content)
     }
 }

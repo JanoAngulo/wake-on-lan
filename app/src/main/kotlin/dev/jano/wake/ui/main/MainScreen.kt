@@ -50,6 +50,7 @@ data class MainActions(
     val openSettings: () -> Unit,
     val openSetupHelp: () -> Unit,
     val switchDevice: () -> Unit,
+    val unlock: () -> Unit,
 )
 
 @Composable
@@ -87,6 +88,7 @@ fun MainScreen(state: MainUiState, actions: MainActions, nowMs: () -> Long = Sys
                 onWake = actions.wake,
                 onOpenSettings = actions.openSettings,
                 onSwitchDevice = actions.switchDevice,
+                locked = state.lockScreen,
             )
 
             StateNotice(state, name, actions)
@@ -104,7 +106,16 @@ fun MainScreen(state: MainUiState, actions: MainActions, nowMs: () -> Long = Sys
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     TapButton("Sleep", WakeIcons.Sleep, enabled, reducedMotion, haptics, actions.sleep, Modifier.weight(1f))
-                    TapButton("Lock", WakeIcons.Lock, enabled, reducedMotion, haptics, actions.lock, Modifier.weight(1f))
+                    // While the lock screen is up, Lock has nothing to do and Unlock takes its place (a tap:
+                    // the fingerprint is already the deliberate step).
+                    if (state.lockScreen || state.unlocking) {
+                        TapButton(
+                            if (state.unlocking) "Unlocking…" else "Unlock", WakeIcons.Fingerprint, enabled, reducedMotion, haptics,
+                            actions.unlock, Modifier.weight(1f), primary = true, busy = state.unlocking,
+                        )
+                    } else {
+                        TapButton("Lock", WakeIcons.Lock, enabled, reducedMotion, haptics, actions.lock, Modifier.weight(1f))
+                    }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     HoldButton(

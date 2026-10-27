@@ -29,7 +29,9 @@ import dev.jano.wake.main.AppGraph
 import dev.jano.wake.main.MainViewModel
 import dev.jano.wake.net.broadcastOf
 import dev.jano.wake.protocol.DiscoveryReply
+import dev.jano.wake.ui.main.BiometricAuthenticator
 import dev.jano.wake.ui.main.MainActions
+import dev.jano.wake.ui.main.findFragmentActivity
 import dev.jano.wake.ui.main.MainScreen
 import dev.jano.wake.ui.settings.AdvancedScreen
 import dev.jano.wake.ui.settings.DeviceExtras
@@ -187,6 +189,7 @@ private fun MainRoute(vm: MainViewModel, store: dev.jano.wake.data.Store, onOpen
     val state by vm.ui.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var picker by remember { mutableStateOf(false) }
+    val activity = LocalContext.current.findFragmentActivity()
     LaunchedEffect(vm) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             vm.rememberSubnetIfMissing()
@@ -199,6 +202,9 @@ private fun MainRoute(vm: MainViewModel, store: dev.jano.wake.data.Store, onOpen
             wake = vm::wake, shutdown = vm::shutdown, reboot = vm::reboot, sleep = vm::sleep, lock = vm::lock,
             undo = vm::undo, dismissMessage = vm::clearMessage,
             openSettings = onOpenSettings, openSetupHelp = onOpenHelp, switchDevice = { picker = true },
+            unlock = {
+                if (activity != null) vm.unlock(BiometricAuthenticator(activity, "Unlock ${state.device?.name ?: "PC"}"))
+            },
         ),
     )
     if (picker) DevicePickerSheet(store, onSelect = vm::select, onWakeAll = vm::wakeAll, onDismiss = { picker = false })

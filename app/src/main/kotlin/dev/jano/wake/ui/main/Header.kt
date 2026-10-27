@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -64,6 +65,7 @@ import dev.jano.wake.status.PcState
 import dev.jano.wake.ui.icons.WakeIcons
 import dev.jano.wake.ui.theme.Motion
 import dev.jano.wake.ui.theme.WakeColors
+import dev.jano.wake.ui.theme.WakeShapes
 import dev.jano.wake.ui.theme.WakeType
 
 /** Bottom edge curves like the CSS `border-radius: 0 0 50% 50% / 0 0 40px 40px` in the prototype. */
@@ -109,6 +111,7 @@ fun Header(
     onWake: () -> Unit,
     onOpenSettings: () -> Unit,
     onSwitchDevice: () -> Unit,
+    locked: Boolean = false,
 ) {
     val onness = remember { Animatable(onnessOf(pc)) }
     val target = onnessOf(pc)
@@ -180,21 +183,44 @@ fun Header(
         Hero(pc, heroDescription, reducedMotion, haptics, onWake)
         Spacer(Modifier.height(22.dp))
         AnimatedContent(
-            targetState = caption,
+            targetState = caption to locked,
             transitionSpec = { fadeIn(tween(Motion.CROSSFADE_MS)) togetherWith fadeOut(tween(Motion.CROSSFADE_MS)) },
             label = "caption",
-        ) { text ->
-            Text(
-                text,
-                style = WakeType.HeroCaption,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                // Not a live region: the waking timer changes every second. MainScreen announces
-                // state changes once instead (Presentation.announcement).
+        ) { (text, isLocked) ->
+            Row(
                 modifier = Modifier.padding(horizontal = 24.dp),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (isLocked) LockedPill()
+                Text(
+                    text,
+                    style = WakeType.HeroCaption,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    // Not a live region: the waking timer changes every second. MainScreen announces
+                    // state changes once instead (Presentation.announcement).
+                )
+            }
         }
         Spacer(Modifier.height(52.dp))
+    }
+}
+
+/** White-on-glass so it reads on the header gradient; the status pills below are for the dark surface. */
+@Composable
+private fun LockedPill() {
+    Row(
+        modifier = Modifier
+            .heightIn(min = 30.dp)
+            .background(WakeColors.Background.copy(alpha = 0.38f), WakeShapes.Pill)
+            .border(1.dp, Color.White.copy(alpha = 0.28f), WakeShapes.Pill)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(WakeIcons.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Text("Locked", style = WakeType.Pill, color = Color.White, maxLines = 1)
     }
 }
 

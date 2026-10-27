@@ -2,9 +2,9 @@ package dev.jano.wake
 
 import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import dev.jano.wake.net.broadcastOf
 import dev.jano.wake.net.discoverAgents
@@ -17,7 +17,8 @@ import dev.jano.wake.ui.main.MainScreen
 import dev.jano.wake.ui.theme.WakeTheme
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+// FragmentActivity (still a ComponentActivity) because BiometricPrompt hosts its dialog in a fragment.
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -45,6 +46,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val DEBUG_TAG = "WakeDebug"
-        val noActions = MainActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        val noActions = MainActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
     }
 }

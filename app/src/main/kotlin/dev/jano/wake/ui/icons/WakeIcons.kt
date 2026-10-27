@@ -43,6 +43,20 @@ object WakeIcons {
     val Alert by lazy {
         icon("alert", "M12 9v4M12 17h.01", "M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z")
     }
+    // Shapes after Lucide's "fingerprint" (ISC licence).
+    val Fingerprint by lazy {
+        icon(
+            "fingerprint",
+            "M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4", "M14 13.12c0 2.38 0 6.38-1 8.88", "M17.29 21.02c.12-.6.43-2.3.5-3.02",
+            "M2 12a10 10 0 0 1 18-6", "M2 16h.01", "M21.8 16c.2-2 .131-5.354 0-6", "M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2",
+            "M8.65 22c.21-.66.45-1.32.57-2", "M9 6.8a6 6 0 0 1 9 5.2v2",
+        )
+    }
+    val Eye by lazy { icon("eye", "M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0", "M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0") }
+    val EyeOff by lazy {
+        icon("eye-off", "M10.7 5.1A10.7 10.7 0 0 1 21.94 11.65a1 1 0 0 1 0 .7 10.8 10.8 0 0 1-1.44 2.49", "M14.1 14.2a3 3 0 0 1-4.2-4.2",
+            "M17.5 17.5a10.75 10.75 0 0 1-15.44-5.15 1 1 0 0 1 0-.7 10.75 10.75 0 0 1 4.45-5.14", "M2 2l20 20")
+    }
     val ChevronDown by lazy { icon("chevron-down", "M6 9l6 6 6-6") }
     val ChevronRight by lazy { icon("chevron-right", "M9 6l6 6-6 6") }
     val Back by lazy { icon("back", "M15 6l-6 6 6 6") }
