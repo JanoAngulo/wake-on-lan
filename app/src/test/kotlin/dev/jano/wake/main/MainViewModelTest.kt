@@ -33,6 +33,8 @@ import kotlinx.coroutines.test.setMain
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import dev.jano.wake.data.Authenticator
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -273,5 +275,167 @@ class MainViewModelTest {
         vm.shutdown()
         advanceUntilIdle()
         assertEquals(emptyList(), commands)
+    }
+
+    private var authCalls = 0
+    private val approve = Authenticator { cipher -> authCalls++; cipher }
+    private val cancel = Authenticator { authCalls++; null }
+
+    private fun savePassword(text: String = "pässwörd") {
+        val cipher = passwords.sealCipher("d1")
+        passwords.save("d1", cipher, text.toByteArray())
+    }
+
+    /** Selected PC on, agent answering, lock screen up. */
+    private suspend fun TestScope.lockedPc() {
+        lockScreen = true
+        seed()
+        vm.pollOnce()
+        runCurrent()
+    }
+
+    @Test
+    fun unlockSendsSavedPassword() = scope.runTest {
+        savePassword()
+        lockedPc()
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertContentEquals("pässwörd".toByteArray(), sentPasswords.single())
+        assertEquals(UiMessage.Info("MY-PC unlocked"), vm.ui.value.message)
+        assertEquals(false, vm.ui.value.lockScreen)
+    }
+
+    @Test
+    fun cancelledFingerprintSendsNothing() = scope.runTest {
+        savePassword()
+        lockedPc()
+        vm.unlock(cancel)
+        advanceUntilIdle()
+        assertEquals(1, authCalls)
+        assertEquals(0, unlockCalls)
+        assertEquals(null, vm.ui.value.message)
+    }
+
+    @Test
+    fun unlockWithNothingSavedOpensSetup() = scope.runTest {
+        lockedPc()
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(UiMessage.OpenUnlockSetup("d1"), vm.ui.value.message)
+        assertEquals(0, authCalls)
+        assertEquals(0, unlockCalls)
+    }
+
+    @Test
+    fun wrongPasswordClearsSavedPasswordAndOpensSetup() = scope.runTest {
+        savePassword()
+        lockedPc()
+        unlockResult = UnlockResult.WRONG_PASSWORD
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(false, passwords.saved("d1"))
+        assertEquals(
+            UiMessage.OpenUnlockSetup("d1", "MY-PC didn't accept the saved password. Enter it again."),
+            vm.ui.value.message,
+        )
+        assertEquals(1, unlockCalls)
+    }
+
+    @Test
+    fun invalidatedKeyAsksForPasswordAgain() = scope.runTest {
+        savePassword()
+        passwords.invalidated += "d1"
+        lockedPc()
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(
+            UiMessage.OpenUnlockSetup("d1", "Fingerprints on this phone changed. Enter the PC password again."),
+            vm.ui.value.message,
+        )
+        assertEquals(0, authCalls)
+        assertEquals(0, unlockCalls)
+    }
+
+    @Test
+    fun unlockWhenAgentUnreachableShowsMessageAndDoesNotRetry() = scope.runTest {
+        savePassword()
+        lockedPc()
+        unlockError = java.io.IOException("down")
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(1, unlockCalls)
+        assertEquals(UiMessage.Info("Couldn't reach the agent on the PC."), vm.ui.value.message)
+    }
+
+    @Test
+    fun notLockedResultRefreshesQuietly() = scope.runTest {
+        savePassword()
+        lockedPc()
+        unlockResult = UnlockResult.NOT_LOCKED
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(null, vm.ui.value.message)
+        assertEquals(false, vm.ui.value.lockScreen)
+    }
+
+    @Test
+    fun failureResultsShowMessages() = scope.runTest {
+        savePassword()
+        lockedPc()
+        val expected = mapOf(
+            UnlockResult.NO_MODULE to "Fingerprint unlock isn't installed on MY-PC. Run Install Wake Agent again on the PC.",
+            UnlockResult.TIMEOUT to "MY-PC didn't answer in time.",
+            UnlockResult.FAILED to "Couldn't unlock MY-PC.",
+        )
+        for ((result, text) in expected) {
+            unlockResult = result
+            vm.unlock(approve)
+            advanceUntilIdle()
+            assertEquals(UiMessage.Info(text), vm.ui.value.message)
+            assertEquals(true, passwords.saved("d1"))
+        }
+    }
+
+    @Test
+    fun secondTapWhileUnlockingIsIgnored() = scope.runTest {
+        savePassword()
+        lockedPc()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        unlockGate = gate
+        vm.unlock(approve)
+        runCurrent()
+        assertTrue(vm.ui.value.unlocking)
+        vm.unlock(approve)
+        runCurrent()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, authCalls)
+        assertEquals(1, unlockCalls)
+        assertEquals(false, vm.ui.value.unlocking)
+    }
+
+    @Test
+    fun passwordZeroedAfterSend() = scope.runTest {
+        savePassword()
+        lockedPc()
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertTrue(lastSentPassword!!.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun lockScreenOnlyWhenAgentSaysTrue() = scope.runTest {
+        seed()
+        for ((reported, shown) in listOf(null to false, false to false, true to true)) {
+            lockScreen = reported
+            vm.pollOnce()
+            runCurrent()
+            assertEquals(shown, vm.ui.value.lockScreen, "agent said $reported")
+        }
+        agentUp = false
+        hostUp = false
+        repeat(3) { vm.pollOnce() }
+        runCurrent()
+        assertEquals(false, vm.ui.value.lockScreen)
     }
 }

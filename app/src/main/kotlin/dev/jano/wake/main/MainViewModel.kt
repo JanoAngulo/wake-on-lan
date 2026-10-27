@@ -2,13 +2,16 @@ package dev.jano.wake.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.jano.wake.data.Authenticator
 import dev.jano.wake.data.Device
+import dev.jano.wake.data.OpenResult
 import dev.jano.wake.net.PhoneNet
 import dev.jano.wake.net.ProbeResult
 import dev.jano.wake.net.isHome
 import dev.jano.wake.net.subnetOf
 import dev.jano.wake.protocol.Action
 import dev.jano.wake.protocol.StatusResponse
+import dev.jano.wake.protocol.UnlockResult
 import dev.jano.wake.protocol.parseMac
 import dev.jano.wake.status.PcState
 import dev.jano.wake.status.StatusMachine
@@ -35,25 +38,31 @@ class MainViewModel(
     private val phone = MutableStateFlow(PhoneNet(false, null, null))
     private val agentStatus = MutableStateFlow<StatusResponse?>(null)
     private val message = MutableStateFlow<UiMessage?>(null)
+    private val unlocking = MutableStateFlow(false)
     private var downs = 0
     private var agentMisses = 0
     private var pollCount = 0
     private var discovering = false
     private var undoJob: Job? = null
 
-    val ui: StateFlow<MainUiState> = combine(graph.repository.store, machine.state, agentStatus, phone, message) { store, pc, status, net, msg ->
-        val device = store.selected
-        MainUiState(
-            device = device,
-            deviceCount = store.devices.size,
-            pc = pc,
-            agentStatus = status,
-            phone = net,
-            home = isHome(net, device?.subnet),
-            haptics = store.settings.haptics,
-            message = msg,
-        )
-    }.stateIn(
+    val ui: StateFlow<MainUiState> = combine(
+        combine(graph.repository.store, machine.state, agentStatus, phone, message) { store, pc, status, net, msg ->
+            val device = store.selected
+            MainUiState(
+                device = device,
+                deviceCount = store.devices.size,
+                pc = pc,
+                agentStatus = status,
+                phone = net,
+                home = isHome(net, device?.subnet),
+                haptics = store.settings.haptics,
+                message = msg,
+                lockScreen = pc is PcState.On && status?.lockScreen == true,
+                unlockSaved = device != null && graph.unlockPasswords.saved(device.id),
+            )
+        },
+        unlocking,
+    ) { state, busy -> state.copy(unlocking = busy) }.stateIn(
         viewModelScope,
         SharingStarted.Eagerly,
         MainUiState(null, 0, machine.state.value, null, phone.value, false, true, null),
@@ -150,6 +159,58 @@ class MainViewModel(
     }
 
     fun lock() = command(Action.LOCK) { device -> "${device.name} locked" }
+
+    /** Fingerprint, then one /unlock. Never retried: a wrong password must not count twice toward lockout. */
+    fun unlock(auth: Authenticator) {
+        if (!agentReady() || unlocking.value) return
+        unlocking.value = true
+        viewModelScope.launch {
+            try {
+                runUnlock(auth)
+            } finally {
+                unlocking.value = false
+            }
+        }
+    }
+
+    private suspend fun runUnlock(auth: Authenticator) {
+        val device = graph.repository.store.first().selected ?: return
+        val api = api() ?: return
+        val passwords = graph.unlockPasswords
+        val cipher = when (val opened = passwords.openCipher(device.id)) {
+            OpenResult.NotSaved -> return run { message.value = UiMessage.OpenUnlockSetup(device.id) }
+            OpenResult.Invalidated -> return run {
+                message.value = UiMessage.OpenUnlockSetup(device.id, "Fingerprints on this phone changed. Enter the PC password again.")
+            }
+            is OpenResult.Ready -> auth.authenticate(opened.cipher) ?: return
+        }
+        val password = runCatching { passwords.open(cipher, device.id) }
+            .getOrElse { return run { message.value = UiMessage.Info("Couldn't unlock ${device.name}.") } }
+        val response = try {
+            api.unlock(password)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            return unreachable()
+        } finally {
+            password.fill(0)
+        }
+        message.value = when (response.result) {
+            UnlockResult.UNLOCKED -> UiMessage.Info("${device.name} unlocked")
+            UnlockResult.WRONG_PASSWORD -> {
+                passwords.remove(device.id)
+                UiMessage.OpenUnlockSetup(device.id, "${device.name} didn't accept the saved password. Enter it again.")
+            }
+            UnlockResult.NOT_LOCKED -> null
+            UnlockResult.NO_MODULE ->
+                UiMessage.Info("Fingerprint unlock isn't installed on ${device.name}. Run Install Wake Agent again on the PC.")
+            UnlockResult.TIMEOUT -> UiMessage.Info("${device.name} didn't answer in time.")
+            UnlockResult.FAILED -> UiMessage.Info("Couldn't unlock ${device.name}.")
+        }
+        // Windows' own answer says the lock screen is gone; don't wait for the next poll to show it.
+        if (response.result == UnlockResult.UNLOCKED || response.result == UnlockResult.NOT_LOCKED) {
+            agentStatus.value = agentStatus.value?.copy(lockScreen = false)
+        }
+    }
 
     fun undo() {
         val current = message.value as? UiMessage.Undo ?: return

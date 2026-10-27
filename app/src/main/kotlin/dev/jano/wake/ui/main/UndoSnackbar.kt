@@ -79,6 +79,7 @@ fun MessageSnackbar(
                 }
                 is UiMessage.Info -> current.text
                 UiMessage.TooLateToUndo -> "Too late to undo. $deviceName is already shutting down."
+                is UiMessage.OpenUnlockSetup -> current.reason ?: "Set up fingerprint unlock in Settings first."
             }
             Text(text, style = WakeType.Body, color = WakeColors.Background, modifier = Modifier.weight(1f).padding(vertical = 14.dp))
             if (current is UiMessage.Undo) {
