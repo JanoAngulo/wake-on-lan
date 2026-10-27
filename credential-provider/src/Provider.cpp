@@ -1,4 +1,5 @@
 #include "Provider.h"
+#include "Trace.h"
 
 #include <propkey.h>
 
@@ -89,6 +90,7 @@ IFACEMETHODIMP_(ULONG) Provider::Release() {
 IFACEMETHODIMP Provider::SetUsageScenario(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus, DWORD) {
     try {
         // Unlock only. Anything else (logon, UAC, change password) is not ours.
+        Trace(L"SetUsageScenario cpus=%d", static_cast<int>(cpus));
         if (cpus != CPUS_UNLOCK_WORKSTATION) return E_NOTIMPL;
         cpus_ = cpus;
         return S_OK;
@@ -119,6 +121,7 @@ HRESULT Provider::StartPipeIfReady() {
     }
     // Start outside the lock: the pipe thread calls back into OnUnlockRequest, which takes it.
     HRESULT hr = pipe_.Start(this, sid);
+    Trace(L"pipe start hr=0x%08X", static_cast<unsigned>(hr));
     if (FAILED(hr)) {
         StopPipe();
         return hr;
@@ -147,7 +150,9 @@ IFACEMETHODIMP Provider::Advise(ICredentialProviderEvents* pcpe, UINT_PTR upAdvi
             if (events_) events_->AddRef();
             adviseContext_ = upAdviseContext;
         }
-        return StartPipeIfReady();
+        Trace(L"Advise");
+        StartPipeIfReady();  // as in SetUserArray: never fail Advise over the pipe
+        return S_OK;
     } catch (...) {
         return E_UNEXPECTED;
     }
@@ -155,6 +160,7 @@ IFACEMETHODIMP Provider::Advise(ICredentialProviderEvents* pcpe, UINT_PTR upAdvi
 
 IFACEMETHODIMP Provider::UnAdvise() {
     try {
+        Trace(L"UnAdvise");
         StopPipe();  // stops and joins the pipe thread before we drop events_
         std::lock_guard<std::mutex> lock(mutex_);
         if (events_) {
@@ -200,6 +206,7 @@ IFACEMETHODIMP Provider::GetCredentialCount(DWORD* pdwCount, DWORD* pdwDefault,
         *pdwCount = credential_ ? 1 : 0;
         *pdwDefault = pending ? 0 : CREDENTIAL_PROVIDER_NO_DEFAULT;
         *pbAutoLogonWithDefault = pending ? TRUE : FALSE;
+        Trace(L"GetCredentialCount count=%lu pending=%d", *pdwCount, pending ? 1 : 0);
         return S_OK;
     } catch (...) {
         return E_UNEXPECTED;
@@ -254,7 +261,10 @@ IFACEMETHODIMP Provider::SetUserArray(ICredentialProviderUserArray* users) {
                 credential_->SetUser(userName_, userSid_, isLocal);
             }
         }
-        return StartPipeIfReady();
+        Trace(L"SetUserArray users=%lu sid=%d local=%d", count, sid.empty() ? 0 : 1, isLocal ? 1 : 0);
+        // A pipe failure must not cost the tile: LogonUI drops a provider whose SetUserArray fails.
+        StartPipeIfReady();
+        return S_OK;
     } catch (...) {
         return E_UNEXPECTED;
     }

@@ -1,4 +1,5 @@
 #include "ClassFactory.h"
+#include "Trace.h"
 
 #include <new>
 
@@ -51,6 +52,7 @@ IFACEMETHODIMP ClassFactory::CreateInstance(IUnknown* pUnkOuter, REFIID riid, vo
         auto* provider = new (std::nothrow) Provider();
         if (!provider) return E_OUTOFMEMORY;
         HRESULT hr = provider->QueryInterface(riid, ppv);
+        Trace(L"CreateInstance hr=0x%08X", static_cast<unsigned>(hr));
         provider->Release();
         return hr;
     } catch (...) {

@@ -7,6 +7,7 @@
 
 #include "Guids.h"
 #include "PipeServer.h"
+#include "Trace.h"
 #include "UnlockLogon.h"
 
 // Tile bitmap, also referenced by resources.rc.
@@ -245,7 +246,11 @@ IFACEMETHODIMP Credential::GetBitmapValue(DWORD dwFieldID, HBITMAP* phbmp) {
         if (dwFieldID != FI_TILE_IMAGE) return E_INVALIDARG;
         HBITMAP bmp = static_cast<HBITMAP>(LoadImageW(g_hInst, MAKEINTRESOURCEW(IDB_TILE),
                                                       IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
-        if (!bmp) return HRESULT_FROM_WIN32(GetLastError());
+        if (!bmp) {
+            const HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+            Trace(L"tile bitmap hr=0x%08X", static_cast<unsigned>(hr));
+            return hr;
+        }
         *phbmp = bmp;
         return S_OK;
     } catch (...) {
