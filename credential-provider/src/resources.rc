@@ -3,7 +3,8 @@
 // Must match IDB_TILE in Credential.cpp.
 #define IDB_TILE 101
 
-// 128x128, 32-bit with premultiplied alpha: a white fingerprint on transparent, like the built-in
+// 128x128, 32-bit BI_RGB with premultiplied alpha (classic 40-byte header: LoadImageW rejects V5),
+// a white fingerprint on transparent, like the built-in
 // sign-in option icons. Same glyph as the app's WakeIcons.Fingerprint.
 IDB_TILE BITMAP "wake_tile.bmp"
 

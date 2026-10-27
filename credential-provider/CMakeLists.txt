@@ -53,3 +53,8 @@ foreach(name replies_reported_result stop_after_submit_replies_provider_closed
     # A shutdown bug shows up as a hang; fail it instead of stalling the build.
     set_tests_properties(${name} PROPERTIES TIMEOUT 20)
 endforeach()
+
+add_executable(tile_bitmap_test tests/tile_bitmap_test.cpp)
+target_compile_definitions(tile_bitmap_test PRIVATE WAKE_TILE_BMP=L"${CMAKE_SOURCE_DIR}/src/wake_tile.bmp")
+target_link_libraries(tile_bitmap_test PRIVATE user32 gdi32)
+add_test(NAME tile_bitmap_loads COMMAND tile_bitmap_test)
