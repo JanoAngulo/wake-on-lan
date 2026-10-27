@@ -98,6 +98,7 @@ fun UnlockSetupScreen(
                 enabled = password.isNotEmpty(),
                 icon = WakeIcons.Fingerprint,
             )
+            if (info != null) Notice(WakeIcons.Alert, info, inset = 0.dp)
         }
     }
 }

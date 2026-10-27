@@ -415,6 +415,18 @@ class MainViewModelTest {
     }
 
     @Test
+    fun keystoreErrorOnOpenShowsMessageAndSendsNothing() = scope.runTest {
+        savePassword()
+        passwords.keystoreBroken = true
+        lockedPc()
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(UiMessage.Info("Couldn't unlock MY-PC."), vm.ui.value.message)
+        assertEquals(0, unlockCalls)
+        assertEquals(false, vm.ui.value.unlocking)
+    }
+
+    @Test
     fun passwordZeroedAfterSend() = scope.runTest {
         savePassword()
         lockedPc()

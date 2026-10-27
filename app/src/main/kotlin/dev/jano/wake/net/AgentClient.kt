@@ -45,7 +45,8 @@ class AgentClient(
     @Volatile private var offsetMs = 0L
 
     // The agent waits up to 15 s for Windows to answer an unlock.
-    private val unlockHttp by lazy { http.newBuilder().readTimeout(20, TimeUnit.SECONDS).build() }
+    // No silent resend either: a retry would be rejected as a replay and hide the first attempt's result.
+    private val unlockHttp by lazy { http.newBuilder().readTimeout(20, TimeUnit.SECONDS).retryOnConnectionFailure(false).build() }
 
     suspend fun status(): StatusResponse = call("GET", "/status", null, StatusResponse.serializer())
 

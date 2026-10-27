@@ -13,10 +13,15 @@ class FakeUnlockPasswords : UnlockPasswords {
     val invalidated = mutableSetOf<String>()
     val removed = mutableListOf<String>()
 
+    /** Simulates a Keystore failure, e.g. no screen lock set on the phone. */
+    var keystoreBroken = false
+
     override fun saved(deviceId: String) = deviceId in sealed
 
-    override fun sealCipher(deviceId: String): Cipher =
-        Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key) }
+    override fun sealCipher(deviceId: String): Cipher {
+        if (keystoreBroken) throw java.security.GeneralSecurityException("keystore unavailable")
+        return Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key) }
+    }
 
     override fun save(deviceId: String, cipher: Cipher, password: ByteArray) {
         sealed[deviceId] = cipher.iv + cipher.doFinal(password)
@@ -28,6 +33,7 @@ class FakeUnlockPasswords : UnlockPasswords {
             return OpenResult.Invalidated
         }
         val data = sealed[deviceId] ?: return OpenResult.NotSaved
+        if (keystoreBroken) throw java.security.GeneralSecurityException("keystore unavailable")
         return OpenResult.Ready(
             Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, data, 0, 12)) },
         )

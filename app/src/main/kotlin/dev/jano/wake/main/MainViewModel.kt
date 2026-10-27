@@ -177,7 +177,9 @@ class MainViewModel(
         val device = graph.repository.store.first().selected ?: return
         val api = api() ?: return
         val passwords = graph.unlockPasswords
-        val cipher = when (val opened = passwords.openCipher(device.id)) {
+        val opened = runCatching { passwords.openCipher(device.id) }
+            .getOrElse { return run { message.value = UiMessage.Info("Couldn't unlock ${device.name}.") } }
+        val cipher = when (opened) {
             OpenResult.NotSaved -> return run { message.value = UiMessage.OpenUnlockSetup(device.id) }
             OpenResult.Invalidated -> return run {
                 message.value = UiMessage.OpenUnlockSetup(device.id, "Fingerprints on this phone changed. Enter the PC password again.")

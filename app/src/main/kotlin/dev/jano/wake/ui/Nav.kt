@@ -173,6 +173,7 @@ fun WakeNavHost() {
         }
         composable(Routes.DEVICE) { entry ->
             val device = store.devices.firstOrNull { it.id == entry.arguments?.getString("id") }
+            LaunchedEffect(Unit) { settingsVm.refreshUnlockSaved() }
             if (device == null) {
                 LaunchedEffect(Unit) { nav.popBackStack() }
             } else {
@@ -206,7 +207,10 @@ fun WakeNavHost() {
             val device = store.devices.firstOrNull { it.id == entry.arguments?.getString("id") }
             val info by settingsVm.unlockInfo.collectAsStateWithLifecycle()
             val activity = context.findFragmentActivity()
-            LaunchedEffect(Unit) { settingsVm.clearUnlockInfo() }
+            LaunchedEffect(Unit) {
+                settingsVm.clearUnlockInfo()
+                settingsVm.refreshUnlockSaved()
+            }
             if (device == null || activity == null) {
                 LaunchedEffect(Unit) { nav.popBackStack() }
             } else {

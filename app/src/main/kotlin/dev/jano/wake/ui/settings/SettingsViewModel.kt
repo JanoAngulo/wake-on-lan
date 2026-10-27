@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.nio.CharBuffer
+import java.security.GeneralSecurityException
 import java.util.UUID
 
 class SettingsViewModel(private val graph: AppGraph) : ViewModel() {
@@ -59,6 +60,9 @@ class SettingsViewModel(private val graph: AppGraph) : ViewModel() {
             bytes = utf8(password)
             graph.unlockPasswords.save(deviceId, cipher, bytes)
             unlockInfo.value = "Saved. Lock your PC and tap Unlock to try it."
+        } catch (e: GeneralSecurityException) {
+            // Typically no screen lock or no strong biometric enrolled, so the Keystore can't make the key.
+            unlockInfo.value = "Couldn't save. Make sure this phone has a screen lock and a fingerprint set up."
         } finally {
             password.fill('\u0000')
             bytes?.fill(0)
@@ -74,6 +78,11 @@ class SettingsViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun clearUnlockInfo() {
         unlockInfo.value = null
+    }
+
+    /** The main screen can remove a password (wrong password, new fingerprints); re-read before showing setup. */
+    fun refreshUnlockSaved() {
+        unlockChanged.value++
     }
 
     fun deleteDevice(id: String) = viewModelScope.launch {

@@ -106,6 +106,28 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun unlockSavedRefreshesAfterRemovalElsewhere() = runTest(dispatcher) {
+        repo.upsertDevice(pc)
+        vm.saveUnlockPassword("d1", "x".toCharArray(), approve)
+        advanceUntilIdle()
+        passwords.remove("d1") // what MainViewModel does after wrong_password
+        vm.refreshUnlockSaved()
+        advanceUntilIdle()
+        assertEquals(emptySet(), vm.unlockSaved.value)
+    }
+
+    @Test
+    fun keystoreFailureShowsMessageInsteadOfCrashing() = runTest(dispatcher) {
+        repo.upsertDevice(pc)
+        passwords.keystoreBroken = true
+        val typed = "x".toCharArray()
+        vm.saveUnlockPassword("d1", typed, approve)
+        advanceUntilIdle()
+        assertEquals("Couldn't save. Make sure this phone has a screen lock and a fingerprint set up.", vm.unlockInfo.value)
+        assertTrue(typed.all { it == '\u0000' })
+    }
+
+    @Test
     fun unpairAlsoRemovesUnlockPassword() = runTest(dispatcher) {
         repo.upsertDevice(pc)
         vm.saveUnlockPassword("d1", "x".toCharArray(), approve)
