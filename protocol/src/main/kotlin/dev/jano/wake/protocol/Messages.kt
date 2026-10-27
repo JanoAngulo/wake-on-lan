@@ -33,6 +33,8 @@ data class StatusResponse(
     val pending: PendingCommand? = null,
     /** "Ethernet" or "Wi-Fi": how the PC is connected. */
     val link: String? = null,
+    /** True while the lock screen is up, false when unlocked, null when the unlock module isn't installed. */
+    val lockScreen: Boolean? = null,
 )
 
 @Serializable
