@@ -27,9 +27,9 @@ interface PipeHost {
     fun wakeDisplay()
 }
 
-// SYSTEM, and Administrators (the default owner of objects SYSTEM creates). A normal-user program
-// can't create a pipe owned by either, so a squatter on the pipe name never sees the password.
-private val TRUSTED_OWNERS = setOf("S-1-5-18", "S-1-5-32-544")
+// SYSTEM only: LogonUI's pipe is owned by S-1-5-18 (confirmed in the VM spike). No user program, even
+// an elevated one, can create a pipe owned by SYSTEM, so a squatter on the pipe name never sees the password.
+private val TRUSTED_OWNERS = setOf("S-1-5-18")
 
 // The provider's "closed without a result" reply; must match kStatusProviderClosed in PipeProtocol.h.
 private const val STATUS_PROVIDER_CLOSED = 0xFFFFFFFFL

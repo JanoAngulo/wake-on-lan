@@ -116,9 +116,11 @@ class UnlockRelayTest {
     }
 
     @Test
-    fun acceptsAdministratorsOwner() {
-        val host = FakeHost(channel = FakeChannel("S-1-5-32-544", ByteArray(8)))
-        assertEquals(UnlockResult.UNLOCKED, relay(host).relay(pw()).result)
+    fun rejectsAdministratorsOwner() {
+        // LogonUI's pipe is owned by SYSTEM (seen in the VM spike); an elevated user program's would not be.
+        val channel = FakeChannel("S-1-5-32-544", ByteArray(8))
+        assertEquals(UnlockResult.FAILED, relay(FakeHost(channel = channel)).relay(pw()).result)
+        assertTrue(channel.writes.isEmpty())
     }
 
     @Test
