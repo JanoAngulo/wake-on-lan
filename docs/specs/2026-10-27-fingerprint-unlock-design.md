@@ -212,6 +212,18 @@ Reuses the existing visual system (dark, Manrope, current pills and buttons).
 
 **Spike first:** before any app or agent work, build the minimal DLL and test in the VM, driven by a PowerShell pipe client, to answer the early risks: auto-submit works behind the lock-screen curtain, the Microsoft-account qualified name works, the pipe owner SID is what §7 expects, and the "Windows Hello only" setting's effect.
 
+**Spike results** (2026-10-28, Hyper-V VM, Windows 11, Microsoft account):
+
+- **Usage scenario:** the Windows 10+ lock screen asks providers for `CPUS_LOGON`, not `CPUS_UNLOCK_WORKSTATION` (Microsoft merged the two). The DLL now serves both and packs `KerbInteractiveLogon` for `CPUS_LOGON`. As a side effect, the Wake tile also appears at sign-in after a reboot. It is never the default there, and it does nothing, because no agent is running yet. This replaces §8's "`CPUS_UNLOCK_WORKSTATION` only".
+- **Listing in Sign-in options:** the tile appears only when its fields carry `CPFG_CREDENTIAL_PROVIDER_LOGO` and `CPFG_CREDENTIAL_PROVIDER_LABEL`.
+- **Auto-submit behind the curtain:** works. The VM unlocked with nobody touching it.
+- **Microsoft account:** works through the `CredPackAuthenticationBuffer` path, with `status=0x00000000`.
+- **Wrong password:** gives `status=0xC000006D`, the normal wrong-password message, and the lock screen stays usable.
+- **Pipe owner:** `S-1-5-18`. The agent now accepts SYSTEM only.
+- **"Only allow Windows Hello sign-in for Microsoft accounts":** when on, it hides the password tile and every third-party tile, Wake included, so it must be off.
+- **Passwordless Microsoft account:** cannot work at all, because there is no password to send. The account needs passwordless turned off (account.microsoft.com → Security).
+- **Not tested in the VM:** waking the display after sleep. This moves to the real-PC checkpoint.
+
 ## 13. Version 2 (not in this build): sign in after cold boot
 
 Needs a Windows service running as SYSTEM, started before login, serving `/unlock` (and `/status`) so the phone can reach the PC before anyone signs in, and the DLL supporting `CPUS_LOGON`. The service owns the pipe client role instead of the tray agent. Pairing secret storage moves to a location the service can read (DPAPI machine scope, admin-only ACL). Designed separately once version 1 is proven.
