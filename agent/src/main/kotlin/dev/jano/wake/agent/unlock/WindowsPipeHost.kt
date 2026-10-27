@@ -37,7 +37,7 @@ class WindowsPipeHost : PipeHost {
 
     // WaitNamedPipe only asks whether an instance exists; it never takes the provider's one connection.
     override fun pipeExists(): Boolean =
-        kernel32.WaitNamedPipe(PIPE_NAME, 1) || kernel32.GetLastError() == ERROR_SEM_TIMEOUT
+        kernel32.WaitNamedPipe(PIPE_NAME, 1) || Native.getLastError() == ERROR_SEM_TIMEOUT
 
     override fun connect(): PipeChannel? {
         val handle = kernel32.CreateFile(
@@ -90,7 +90,7 @@ class WindowsPipeHost : PipeHost {
             try {
                 buffer.write(0, bytes, 0, bytes.size)
                 if (!raw.WriteFile(handle, buffer, bytes.size, IntByReference(), null)) {
-                    error("pipe write failed: ${kernel32.GetLastError()}")
+                    error("pipe write failed: ${Native.getLastError()}")
                 }
             } finally {
                 buffer.clear()
