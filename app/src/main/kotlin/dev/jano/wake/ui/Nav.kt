@@ -27,6 +27,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.jano.wake.main.AppGraph
 import dev.jano.wake.main.MainViewModel
+import dev.jano.wake.main.UiMessage
 import dev.jano.wake.net.broadcastOf
 import dev.jano.wake.protocol.DiscoveryReply
 import dev.jano.wake.ui.main.BiometricAuthenticator
@@ -41,6 +42,7 @@ import dev.jano.wake.ui.settings.PcSetupHelpScreen
 import dev.jano.wake.ui.settings.SettingsScreen
 import dev.jano.wake.ui.settings.SettingsViewModel
 import dev.jano.wake.ui.settings.SetupGuideScreen
+import dev.jano.wake.ui.settings.UnlockSetupScreen
 import dev.jano.wake.ui.setup.FindPcScreen
 import dev.jano.wake.ui.setup.ManualDeviceForm
 import dev.jano.wake.ui.setup.PairScreen
@@ -59,7 +61,9 @@ private object Routes {
     const val ADVANCED = "settings/advanced"
     const val HELP = "settings/help"
     const val GUIDE = "settings/guide"
+    const val UNLOCK = "settings/device/{id}/unlock"
     fun device(id: String) = "settings/device/$id"
+    fun unlock(id: String) = "settings/device/$id/unlock"
 }
 
 private fun NavHostController.goHome() = navigate(Routes.MAIN) { popUpTo(0) { inclusive = true } }
@@ -80,6 +84,12 @@ fun WakeNavHost() {
     var pairing by remember { mutableStateOf<DiscoveryReply?>(null) }
     val setup by setupVm.state.collectAsStateWithLifecycle()
     val store by settingsVm.store.collectAsStateWithLifecycle()
+    val unlockSaved by settingsVm.unlockSaved.collectAsStateWithLifecycle()
+    val main by mainVm.ui.collectAsStateWithLifecycle()
+    // Why the main screen sent us to unlock setup (wrong password, fingerprints changed).
+    var unlockReason by remember { mutableStateOf<String?>(null) }
+    // Only known for the selected PC while its agent answers: null lockScreen means no module installed.
+    fun unlockModuleMissing(id: String) = main.device?.id == id && main.agentStatus != null && main.agentStatus?.lockScreen == null
     val homeBroadcast = remember {
         graph.phoneNet.read().let { if (it.ip != null && it.prefixLength != null) broadcastOf(it.ip, it.prefixLength) else "255.255.255.255" }
     }
@@ -114,7 +124,17 @@ fun WakeNavHost() {
                 onBack = { nav.popBackStack() },
             )
         }
-        composable(Routes.MAIN) { MainRoute(mainVm, store, onOpenSettings = { nav.navigate(Routes.SETTINGS) }, onOpenHelp = { nav.navigate(Routes.HELP) }) }
+        composable(Routes.MAIN) {
+            MainRoute(
+                mainVm, store,
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                onOpenHelp = { nav.navigate(Routes.HELP) },
+                onOpenUnlockSetup = { id, reason ->
+                    unlockReason = reason
+                    nav.navigate(Routes.unlock(id))
+                },
+            )
+        }
         composable(Routes.SETTINGS) {
             val scope = rememberCoroutineScope()
             val message by settingsVm.message.collectAsStateWithLifecycle()
@@ -171,8 +191,40 @@ fun WakeNavHost() {
                                 settingsVm.deleteDevice(device.id)
                                 if (store.devices.size <= 1) nav.navigate(Routes.FIND) { popUpTo(0) { inclusive = true } } else nav.popBackStack()
                             },
+                            unlockSaved = device.id in unlockSaved,
+                            unlockModuleMissing = unlockModuleMissing(device.id),
+                            onUnlockSetup = {
+                                unlockReason = null
+                                nav.navigate(Routes.unlock(device.id))
+                            },
                         )
                     },
+                )
+            }
+        }
+        composable(Routes.UNLOCK) { entry ->
+            val device = store.devices.firstOrNull { it.id == entry.arguments?.getString("id") }
+            val info by settingsVm.unlockInfo.collectAsStateWithLifecycle()
+            val activity = context.findFragmentActivity()
+            LaunchedEffect(Unit) { settingsVm.clearUnlockInfo() }
+            if (device == null || activity == null) {
+                LaunchedEffect(Unit) { nav.popBackStack() }
+            } else {
+                UnlockSetupScreen(
+                    deviceName = device.name,
+                    saved = device.id in unlockSaved,
+                    moduleMissing = unlockModuleMissing(device.id),
+                    reason = unlockReason,
+                    info = info,
+                    onSave = { password ->
+                        unlockReason = null
+                        settingsVm.saveUnlockPassword(
+                            device.id, password,
+                            BiometricAuthenticator(activity, "Save password for ${device.name}", "Your fingerprint will be needed to use it"),
+                        )
+                    },
+                    onRemove = { settingsVm.removeUnlockPassword(device.id) },
+                    onBack = { nav.popBackStack() },
                 )
             }
         }
@@ -185,8 +237,19 @@ fun WakeNavHost() {
 }
 
 @Composable
-private fun MainRoute(vm: MainViewModel, store: dev.jano.wake.data.Store, onOpenSettings: () -> Unit, onOpenHelp: () -> Unit) {
+private fun MainRoute(
+    vm: MainViewModel,
+    store: dev.jano.wake.data.Store,
+    onOpenSettings: () -> Unit,
+    onOpenHelp: () -> Unit,
+    onOpenUnlockSetup: (deviceId: String, reason: String?) -> Unit,
+) {
     val state by vm.ui.collectAsStateWithLifecycle()
+    LaunchedEffect(state.message) {
+        val open = state.message as? UiMessage.OpenUnlockSetup ?: return@LaunchedEffect
+        vm.clearMessage()
+        onOpenUnlockSetup(open.deviceId, open.reason)
+    }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var picker by remember { mutableStateOf(false) }
     val activity = LocalContext.current.findFragmentActivity()

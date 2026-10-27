@@ -45,6 +45,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.jano.wake.ui.icons.WakeIcons
 import dev.jano.wake.ui.theme.WakeColors
@@ -86,7 +88,14 @@ fun BodyText(text: String, modifier: Modifier = Modifier) =
     Text(text, style = WakeType.Body, color = WakeColors.OnSurfaceMuted, modifier = modifier)
 
 @Composable
-fun PrimaryButton(label: String, onClick: () -> Unit, enabled: Boolean = true, busy: Boolean = false, modifier: Modifier = Modifier) {
+fun PrimaryButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+) {
     val active = enabled && !busy
     Row(
         modifier = modifier
@@ -102,6 +111,9 @@ fun PrimaryButton(label: String, onClick: () -> Unit, enabled: Boolean = true, b
         if (busy) {
             CircularProgressIndicator(Modifier.size(20.dp), color = WakeColors.OnSurface, strokeWidth = 2.dp)
             Spacer(Modifier.size(12.dp))
+        } else if (icon != null) {
+            Icon(icon, null, tint = if (active) WakeColors.Background else WakeColors.OnSurfaceMuted, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.size(10.dp))
         }
         Text(label, style = WakeType.Button, color = if (active) WakeColors.Background else WakeColors.OnSurfaceMuted)
     }
@@ -160,8 +172,10 @@ fun FormField(
     error: String? = null,
     keyboard: KeyboardOptions = KeyboardOptions.Default,
     onBlur: () -> Unit = {},
+    password: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
+    var shown by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedTextField(
             value = value,
@@ -170,6 +184,21 @@ fun FormField(
             singleLine = true,
             isError = error != null,
             keyboardOptions = keyboard,
+            visualTransformation = if (password && !shown) PasswordVisualTransformation() else VisualTransformation.None,
+            trailingIcon = if (password) {
+                {
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape)
+                            .clickable(role = Role.Button, onClickLabel = if (shown) "Hide password" else "Show password") { shown = !shown }
+                            .semantics { contentDescription = if (shown) "Hide password" else "Show password" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(if (shown) WakeIcons.EyeOff else WakeIcons.Eye, null, tint = WakeColors.OnSurfaceMuted, modifier = Modifier.size(22.dp))
+                    }
+                }
+            } else {
+                null
+            },
             textStyle = WakeType.RowValue,
             shape = WakeShapes.Button,
             colors = OutlinedTextFieldDefaults.colors(

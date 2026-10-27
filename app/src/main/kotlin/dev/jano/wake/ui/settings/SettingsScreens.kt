@@ -141,6 +141,9 @@ fun DeviceExtras(
     onRepair: () -> Unit,
     onUnpair: () -> Unit,
     onDelete: () -> Unit,
+    unlockSaved: Boolean = false,
+    unlockModuleMissing: Boolean = false,
+    onUnlockSetup: () -> Unit = {},
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     if (folders.isNotEmpty()) {
@@ -158,6 +161,21 @@ fun DeviceExtras(
     BodyText(if (device.paired) "Paired with this phone. Shut down, reboot, sleep and lock are available." else "Wake only. Pair with the Wake agent to shut down, reboot, sleep and lock.", Modifier.padding(horizontal = 8.dp))
     SecondaryButton(if (device.paired) "Pair again" else "Pair with agent", onRepair)
     if (device.paired) SecondaryButton("Unpair", onUnpair)
+    if (device.paired) {
+        SectionLabel("Fingerprint unlock")
+        KeyValueCard(inset = 0.dp) {
+            ListRow(
+                "Fingerprint unlock",
+                subtitle = when {
+                    unlockSaved -> "On"
+                    unlockModuleMissing -> "Install the unlock module on the PC first"
+                    else -> "Off"
+                },
+                icon = WakeIcons.Fingerprint,
+                onClick = onUnlockSetup,
+            )
+        }
+    }
     SecondaryButton("Delete device", { confirmDelete = true }, danger = true)
 
     if (confirmDelete) {
