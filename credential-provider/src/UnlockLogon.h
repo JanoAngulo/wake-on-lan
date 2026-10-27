@@ -14,11 +14,12 @@ namespace wake {
 // Split "DOMAIN\user" at the first backslash. No backslash: empty domain, the whole name as user.
 void SplitUserName(const std::wstring& qualified, std::wstring* domain, std::wstring* user);
 
-// Pack a KERB_INTERACTIVE_UNLOCK_LOGON with MessageType KerbWorkstationUnlockLogon. The three
+// Pack a KERB_INTERACTIVE_UNLOCK_LOGON with the given MessageType: KerbInteractiveLogon for CPUS_LOGON
+// (which Windows 10+ also uses at the lock screen), KerbWorkstationUnlockLogon for CPUS_UNLOCK_WORKSTATION. The three
 // strings follow the struct in one CoTaskMemAlloc block; each UNICODE_STRING.Buffer holds the
 // string's byte offset from the start of the block, which is what LSA expects. Lengths are in bytes
 // with no terminator. The caller owns *prgb (CoTaskMemFree, after SecureZeroMemory).
-HRESULT PackUnlockLogon(const std::wstring& domain, const std::wstring& user, const wchar_t* password,
-                        size_t passwordChars, BYTE** prgb, DWORD* pcb);
+HRESULT PackUnlockLogon(KERB_LOGON_SUBMIT_TYPE messageType, const std::wstring& domain, const std::wstring& user,
+                        const wchar_t* password, size_t passwordChars, BYTE** prgb, DWORD* pcb);
 
 }  // namespace wake

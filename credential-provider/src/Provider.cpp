@@ -89,9 +89,10 @@ IFACEMETHODIMP_(ULONG) Provider::Release() {
 
 IFACEMETHODIMP Provider::SetUsageScenario(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus, DWORD) {
     try {
-        // Unlock only. Anything else (logon, UAC, change password) is not ours.
         Trace(L"SetUsageScenario cpus=%d", static_cast<int>(cpus));
-        if (cpus != CPUS_UNLOCK_WORKSTATION) return E_NOTIMPL;
+        // Windows 10+ merged lock-screen unlock into CPUS_LOGON, so both are ours. UAC, change
+        // password and CredUI are not.
+        if (cpus != CPUS_LOGON && cpus != CPUS_UNLOCK_WORKSTATION) return E_NOTIMPL;
         cpus_ = cpus;
         return S_OK;
     } catch (...) {
@@ -107,7 +108,7 @@ HRESULT Provider::StartPipeIfReady() {
     std::wstring sid;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (cpus_ != CPUS_UNLOCK_WORKSTATION || !events_ || !credential_ || userSid_.empty())
+        if ((cpus_ != CPUS_LOGON && cpus_ != CPUS_UNLOCK_WORKSTATION) || !events_ || !credential_ || userSid_.empty())
             return S_OK;  // the other half (Advise or SetUserArray) has not happened yet
         sid = userSid_;
     }
@@ -257,8 +258,10 @@ IFACEMETHODIMP Provider::SetUserArray(ICredentialProviderUserArray* users) {
             if (!credential_) {
                 credential_ = new (std::nothrow) Credential(userName_, userSid_, isLocal);
                 if (!credential_) return E_OUTOFMEMORY;
+                credential_->SetScenario(cpus_);
             } else {
                 credential_->SetUser(userName_, userSid_, isLocal);
+                credential_->SetScenario(cpus_);
             }
         }
         Trace(L"SetUserArray users=%lu sid=%d local=%d", count, sid.empty() ? 0 : 1, isLocal ? 1 : 0);

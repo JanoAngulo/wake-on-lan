@@ -104,9 +104,9 @@ static HRESULT ProtectIfNecessary(std::vector<wchar_t>& plain, std::vector<wchar
     return S_OK;
 }
 
-// Local account: KERB_INTERACTIVE_UNLOCK_LOGON (KerbWorkstationUnlockLogon) with a protected
+// Local account: KERB_INTERACTIVE_UNLOCK_LOGON (message type from the usage scenario) with a protected
 // password. The sample notes CredPackAuthenticationBuffer does not work for a local unlock.
-static HRESULT PackLocalUser(const std::wstring& qualifiedName, std::vector<wchar_t>& password,
+static HRESULT PackLocalUser(KERB_LOGON_SUBMIT_TYPE messageType, const std::wstring& qualifiedName, std::vector<wchar_t>& password,
                              BYTE** prgb, DWORD* pcb) {
     std::vector<wchar_t> protectedPassword;
     HRESULT hr = ProtectIfNecessary(password, &protectedPassword);
@@ -114,7 +114,7 @@ static HRESULT PackLocalUser(const std::wstring& qualifiedName, std::vector<wcha
 
     std::wstring domain, user;
     SplitUserName(qualifiedName, &domain, &user);
-    hr = PackUnlockLogon(domain, user, protectedPassword.data(),
+    hr = PackUnlockLogon(messageType, domain, user, protectedPassword.data(),
                          wcsnlen(protectedPassword.data(), protectedPassword.size()), prgb, pcb);
     Wipe(protectedPassword);
     return hr;
@@ -305,6 +305,7 @@ IFACEMETHODIMP Credential::GetSerialization(
         std::vector<wchar_t> password;
         std::wstring name;
         bool isLocal = true;
+        KERB_LOGON_SUBMIT_TYPE messageType = KerbInteractiveLogon;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (!RequestPendingLocked()) {
@@ -316,11 +317,12 @@ IFACEMETHODIMP Credential::GetSerialization(
             Wipe(password_);
             name = userName_;
             isLocal = isLocalUser_;
+            messageType = cpus_ == CPUS_UNLOCK_WORKSTATION ? KerbWorkstationUnlockLogon : KerbInteractiveLogon;
         }
 
         BYTE* blob = nullptr;
         DWORD cb = 0;
-        HRESULT hr = isLocal ? PackLocalUser(name, password, &blob, &cb)
+        HRESULT hr = isLocal ? PackLocalUser(messageType, name, password, &blob, &cb)
                              : PackProviderUser(name, password, &blob, &cb);
         Wipe(password);
         if (FAILED(hr)) return hr;
@@ -387,6 +389,11 @@ void Credential::SetPassword(const std::wstring& password) {
 void Credential::ClearPassword() {
     std::lock_guard<std::mutex> lock(mutex_);
     Wipe(password_);
+}
+
+void Credential::SetScenario(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    cpus_ = cpus;
 }
 
 void Credential::SetUser(const std::wstring& qualifiedUserName, const std::wstring& userSid,

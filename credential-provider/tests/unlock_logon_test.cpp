@@ -34,7 +34,7 @@ static void packs_local_unlock_logon() {
     const std::wstring domain = L"MY-PC", user = L"john", password = L"pässwörd";
     BYTE* blob = nullptr;
     DWORD cb = 0;
-    HRESULT hr = wake::PackUnlockLogon(domain, user, password.c_str(), password.size(), &blob, &cb);
+    HRESULT hr = wake::PackUnlockLogon(KerbWorkstationUnlockLogon, domain, user, password.c_str(), password.size(), &blob, &cb);
     CHECK(SUCCEEDED(hr));
     if (FAILED(hr) || !blob) return;
 
@@ -59,11 +59,24 @@ static void packs_local_unlock_logon() {
     CoTaskMemFree(blob);
 }
 
+// Windows 10+ unlocks the lock screen through CPUS_LOGON, which takes an interactive logon.
+static void packs_lock_screen_logon_as_interactive() {
+    const std::wstring password = L"x";
+    BYTE* blob = nullptr;
+    DWORD cb = 0;
+    HRESULT hr = wake::PackUnlockLogon(KerbInteractiveLogon, L"MY-PC", L"john", password.c_str(), password.size(), &blob, &cb);
+    CHECK(SUCCEEDED(hr));
+    if (FAILED(hr) || !blob) return;
+    CHECK(reinterpret_cast<const KERB_INTERACTIVE_UNLOCK_LOGON*>(blob)->Logon.MessageType == KerbInteractiveLogon);
+    SecureZeroMemory(blob, cb);
+    CoTaskMemFree(blob);
+}
+
 static void packs_empty_domain() {
     const std::wstring password = L"ñé\xD83D\xDE00";
     BYTE* blob = nullptr;
     DWORD cb = 0;
-    HRESULT hr = wake::PackUnlockLogon(L"", L"john", password.c_str(), password.size(), &blob, &cb);
+    HRESULT hr = wake::PackUnlockLogon(KerbWorkstationUnlockLogon, L"", L"john", password.c_str(), password.size(), &blob, &cb);
     CHECK(SUCCEEDED(hr));
     if (FAILED(hr) || !blob) return;
     auto* kiul = reinterpret_cast<const KERB_INTERACTIVE_UNLOCK_LOGON*>(blob);
@@ -79,7 +92,7 @@ static void rejects_oversized_strings() {
     std::wstring huge(0x8000, L'a');
     BYTE* blob = reinterpret_cast<BYTE*>(1);
     DWORD cb = 1;
-    CHECK(wake::PackUnlockLogon(L"MY-PC", L"john", huge.c_str(), huge.size(), &blob, &cb) == E_INVALIDARG);
+    CHECK(wake::PackUnlockLogon(KerbWorkstationUnlockLogon, L"MY-PC", L"john", huge.c_str(), huge.size(), &blob, &cb) == E_INVALIDARG);
     CHECK(blob == nullptr && cb == 0);
 }
 
@@ -101,6 +114,7 @@ struct Case {
 int main(int argc, char** argv) {
     const Case cases[] = {
         {"packs_local_unlock_logon", packs_local_unlock_logon},
+        {"packs_lock_screen_logon_as_interactive", packs_lock_screen_logon_as_interactive},
         {"packs_empty_domain", packs_empty_domain},
         {"rejects_oversized_strings", rejects_oversized_strings},
         {"splits_qualified_names", splits_qualified_names},

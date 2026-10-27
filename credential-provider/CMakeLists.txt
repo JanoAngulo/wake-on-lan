@@ -37,7 +37,7 @@ endforeach()
 
 add_executable(unlock_logon_test tests/unlock_logon_test.cpp)
 target_link_libraries(unlock_logon_test PRIVATE provider_core)
-foreach(name packs_local_unlock_logon packs_empty_domain rejects_oversized_strings
+foreach(name packs_local_unlock_logon packs_lock_screen_logon_as_interactive packs_empty_domain rejects_oversized_strings
              splits_qualified_names)
     add_test(NAME ${name} COMMAND unlock_logon_test ${name})
 endforeach()

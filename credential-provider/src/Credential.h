@@ -69,6 +69,7 @@ class Credential : public ICredentialProviderCredential2 {
     void SetPassword(const std::wstring& password);
     void ClearPassword();
     void SetUser(const std::wstring& qualifiedUserName, const std::wstring& userSid, bool isLocalUser);
+    void SetScenario(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus);
     // The provider attaches its running pipe server and detaches it (under our lock) before the
     // server stops or goes away, so the credential never calls into a dead PipeServer.
     void AttachPipe(PipeServer* pipe);
@@ -86,6 +87,7 @@ class Credential : public ICredentialProviderCredential2 {
     std::wstring userName_;
     std::wstring userSid_;
     bool isLocalUser_ = true;
+    CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus_ = CPUS_LOGON;
     std::wstring password_;
 };
 

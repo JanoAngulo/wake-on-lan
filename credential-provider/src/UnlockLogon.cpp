@@ -31,7 +31,7 @@ static void AppendRelative(UNICODE_STRING* dst, const wchar_t* src, size_t chars
     *cursor += bytes;
 }
 
-HRESULT PackUnlockLogon(const std::wstring& domain, const std::wstring& user, const wchar_t* password,
+HRESULT PackUnlockLogon(KERB_LOGON_SUBMIT_TYPE messageType, const std::wstring& domain, const std::wstring& user, const wchar_t* password,
                         size_t passwordChars, BYTE** prgb, DWORD* pcb) {
     if (!prgb || !pcb || (!password && passwordChars)) return E_INVALIDARG;
     *prgb = nullptr;
@@ -50,7 +50,7 @@ HRESULT PackUnlockLogon(const std::wstring& domain, const std::wstring& user, co
     auto* out = reinterpret_cast<KERB_INTERACTIVE_UNLOCK_LOGON*>(blob);
     // LogonId stays zero: Winlogon fills it in.
     KERB_INTERACTIVE_LOGON* logon = &out->Logon;
-    logon->MessageType = KerbWorkstationUnlockLogon;
+    logon->MessageType = messageType;
 
     BYTE* cursor = blob + sizeof(KERB_INTERACTIVE_UNLOCK_LOGON);
     AppendRelative(&logon->LogonDomainName, domain.c_str(), domain.size(), blob, &cursor);

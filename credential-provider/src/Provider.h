@@ -12,7 +12,7 @@ namespace wake {
 
 class Credential;
 
-// The credential provider LogonUI loads. Serves one tile, only for CPUS_UNLOCK_WORKSTATION, and
+// The credential provider LogonUI loads. Serves one tile for CPUS_LOGON (the Windows 10+ lock screen) and CPUS_UNLOCK_WORKSTATION, and
 // owns the pipe server that the agent talks to. Implements IUnlockSink so the pipe thread can push
 // a password in and trigger re-enumeration. The tile is always listed (it shows the module is
 // loaded) but is the default, with auto-logon, only while a phone request is pending.
