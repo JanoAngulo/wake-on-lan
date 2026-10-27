@@ -20,10 +20,17 @@ void WakeDllRelease();
 
 namespace wake {
 
+// Windows 10+ lists a provider under "Sign-in options" only through fields tagged with these
+// (CPFG_CREDENTIAL_PROVIDER_LOGO and CPFG_CREDENTIAL_PROVIDER_LABEL, ShlGuid.h). Local copies keep
+// the GUIDs out of the link, so the test executables don't need an initguid translation unit.
+static constexpr GUID kProviderLogo = {0x2d837775, 0xf6cd, 0x464e, {0xa7, 0x45, 0x48, 0x2f, 0xd0, 0xb4, 0x74, 0x93}};
+static constexpr GUID kProviderLabel = {0x286bbff3, 0xbad4, 0x438f, {0xb0, 0x07, 0x79, 0xb7, 0x26, 0x7c, 0x3d, 0x48}};
+
 const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR kFieldDescriptors[kFieldCount] = {
-    {FI_TILE_IMAGE, CPFT_TILE_IMAGE, const_cast<LPWSTR>(L"Tile Image")},
-    {FI_LABEL, CPFT_LARGE_TEXT, const_cast<LPWSTR>(L"Wake")},
-    {FI_MESSAGE, CPFT_SMALL_TEXT, const_cast<LPWSTR>(L"Waiting for your phone")},
+    {FI_TILE_IMAGE, CPFT_TILE_IMAGE, const_cast<LPWSTR>(L"Tile Image"), kProviderLogo},
+    {FI_LABEL, CPFT_LARGE_TEXT, const_cast<LPWSTR>(L"Wake"), {}},
+    {FI_MESSAGE, CPFT_SMALL_TEXT, const_cast<LPWSTR>(L"Waiting for your phone"), {}},
+    {FI_PROVIDER_LABEL, CPFT_SMALL_TEXT, const_cast<LPWSTR>(L"Wake"), kProviderLabel},
 };
 
 struct FieldStatePair {
@@ -35,6 +42,7 @@ static const FieldStatePair kFieldStates[kFieldCount] = {
     {CPFS_DISPLAY_IN_BOTH, CPFIS_NONE},
     {CPFS_DISPLAY_IN_BOTH, CPFIS_NONE},
     {CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE},
+    {CPFS_HIDDEN, CPFIS_NONE},
 };
 
 static HRESULT CopyString(PCWSTR src, LPWSTR* dst) {
@@ -223,7 +231,7 @@ IFACEMETHODIMP Credential::GetStringValue(DWORD dwFieldID, LPWSTR* ppwsz) {
     try {
         if (!ppwsz) return E_POINTER;
         *ppwsz = nullptr;
-        if (dwFieldID == FI_LABEL) return CopyString(L"Wake", ppwsz);
+        if (dwFieldID == FI_LABEL || dwFieldID == FI_PROVIDER_LABEL) return CopyString(L"Wake", ppwsz);
         if (dwFieldID == FI_MESSAGE) return CopyString(L"Waiting for your phone", ppwsz);
         return E_INVALIDARG;
     } catch (...) {

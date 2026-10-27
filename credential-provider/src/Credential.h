@@ -15,8 +15,9 @@ enum FieldId {
     FI_TILE_IMAGE = 0,
     FI_LABEL = 1,
     FI_MESSAGE = 2,
+    FI_PROVIDER_LABEL = 3,  // hidden; names the provider in "Sign-in options"
 };
-constexpr DWORD kFieldCount = 3;
+constexpr DWORD kFieldCount = 4;
 
 // The field layout, shared with Provider's GetFieldDescriptorAt.
 extern const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR kFieldDescriptors[kFieldCount];
