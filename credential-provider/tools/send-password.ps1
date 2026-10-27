@@ -22,7 +22,7 @@ $frame = $null
 $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 $pipe = New-Object System.IO.Pipes.NamedPipeClientStream('.', 'wake-unlock', [System.IO.Pipes.PipeDirection]::InOut)
 try {
-    $pipe.Connect(5000)
+    $pipe.Connect(30000)  # lock screen may take a while to load the provider
     $pipe.ReadMode = [System.IO.Pipes.PipeTransmissionMode]::Message
 
     # Windows PowerShell 5.1 has PipeStream.GetAccessControl(); PowerShell 7 moved it to an extension class.
