@@ -69,9 +69,17 @@ val agentImage = tasks.register<Exec>("agentImage") {
     )
 }
 
+// Built by credential-provider\build.cmd; WAKE_CP_BUILD moves its output (Controlled Folder Access).
+val unlockDll = rootProject.file(
+    (System.getenv("WAKE_CP_BUILD") ?: "credential-provider/build") + "/Release/WakeCredentialProvider.dll",
+)
+
 // The download: unzip, double-click "Install Wake Agent.cmd".
 tasks.register<Zip>("agentZip") {
     dependsOn(agentImage)
+    doFirst {
+        check(unlockDll.exists()) { "Build the unlock module first: credential-provider\\build.cmd" }
+    }
     archiveFileName.set("WakeAgent-Windows.zip")
     destinationDirectory.set(rootProject.layout.buildDirectory.dir("release"))
     into("WakeAgent-Windows") {
@@ -79,5 +87,6 @@ tasks.register<Zip>("agentZip") {
         from(rootProject.file("Install Wake Agent.cmd"))
         from(rootProject.file("Uninstall Wake Agent.cmd"))
         into("pc-setup") { from(rootProject.file("pc-setup/setup.ps1")) }
+        into("unlock") { from(unlockDll) }
     }
 }

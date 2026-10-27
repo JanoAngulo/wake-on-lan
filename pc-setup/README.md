@@ -20,7 +20,10 @@ The script:
 - confirms Wake on Magic Packet and Shutdown Wake-On-Lan are enabled on the wired adapter;
 - keeps Fast Startup off, so "Shut down" is a real shutdown the phone can wake the PC from;
 - allows the agent's ports (47613 TCP, 47614 UDP) from your home network only;
-- installs the agent to `%LOCALAPPDATA%\Wake` and starts it at every logon.
+- installs the agent to `%LOCALAPPDATA%\Wake` and starts it at every logon;
+- asks `Turn on fingerprint unlock? (y/N)`. Yes copies `WakeCredentialProvider.dll` (pass it with `-UnlockDll`) to `C:\Program Files\Wake` and registers it as an extra lock-screen option. `-Unlock` or `-NoUnlock` answers for you; `-NoUnlock` also removes it if installed.
+
+`-Check` also reports whether *only allow Windows Hello sign-in for Microsoft accounts* is on, since it can hide password-based lock-screen options. Recovery steps if the lock screen misbehaves are in [docs/RUNBOOK.md](../docs/RUNBOOK.md#fingerprint-unlock-recovery).
 
 It only changes what isn't already right, so running it again is safe. If it does change an adapter setting, the network drops for a few seconds.
 

@@ -16,6 +16,9 @@
       2. Fast Startup off, so shutdown is a real shutdown that Wake-on-LAN can wake from.
       3. Firewall: agent ports 47613/TCP and 47614/UDP allowed from the local subnet only.
       4. Agent copied to %LOCALAPPDATA%\Wake and started at logon by a scheduled task.
+      6. Optional fingerprint unlock module: WakeCredentialProvider.dll in C:\Program Files\Wake (admin-only,
+         because LogonUI loads it as SYSTEM), registered as an extra lock-screen tile. Asked about on install;
+         -Unlock / -NoUnlock answer for you. -UnlockDll points at the DLL.
 
     Green Ethernet and Power Saving Mode are only reported: changing adapter settings resets the
     network link, and Wake-on-LAN usually works with them on.
@@ -30,7 +33,10 @@ param(
     [switch]$Check,
     [switch]$Uninstall,
     [string]$AgentDir,
-    [string]$AgentJar = "$PSScriptRoot\..\agent\build\libs\wake-agent.jar"
+    [string]$AgentJar = "$PSScriptRoot\..\agent\build\libs\wake-agent.jar",
+    [switch]$Unlock,
+    [switch]$NoUnlock,
+    [string]$UnlockDll
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +50,11 @@ $InstalledApp = Join-Path $InstallDir 'WakeAgent'
 $InstalledExe = Join-Path $InstalledApp 'WakeAgent.exe'
 $SecretDir = Join-Path $env:APPDATA 'Wake'
 $PowerKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power'
+$UnlockClsid = '{8C5D3B0E-6A41-4C7E-9F2B-5D1A7E3C9B04}'
+$UnlockTarget = Join-Path $env:ProgramFiles 'Wake\WakeCredentialProvider.dll'
+$UnlockComKey = "HKLM:\SOFTWARE\Classes\CLSID\$UnlockClsid"
+$UnlockProviderKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\$UnlockClsid"
+$PasswordLessKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device'
 
 function Test-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -76,6 +87,39 @@ function Get-Javaw {
     $found
 }
 
+function Test-UnlockModule { (Test-Path $UnlockProviderKey) -and (Test-Path -LiteralPath $UnlockTarget) }
+
+function Install-UnlockModule($dll) {
+    New-Item -ItemType Directory -Force (Split-Path $UnlockTarget) | Out-Null
+    Copy-Item -LiteralPath $dll -Destination $UnlockTarget -Force
+    New-Item -Force $UnlockComKey | Out-Null
+    Set-ItemProperty $UnlockComKey '(default)' 'Wake unlock'
+    New-Item -Force "$UnlockComKey\InprocServer32" | Out-Null
+    Set-ItemProperty "$UnlockComKey\InprocServer32" '(default)' $UnlockTarget
+    Set-ItemProperty "$UnlockComKey\InprocServer32" 'ThreadingModel' 'Apartment'
+    New-Item -Force $UnlockProviderKey | Out-Null
+    Set-ItemProperty $UnlockProviderKey '(default)' 'Wake unlock'
+}
+
+# LogonUI may still have the DLL loaded; then it's deleted at the next reboot.
+function Remove-UnlockModule {
+    foreach ($key in $UnlockProviderKey, $UnlockComKey) {
+        if (Test-Path $key) { Remove-Item -Recurse -Force $key }
+    }
+    if (-not (Test-Path -LiteralPath $UnlockTarget)) { return }
+    try {
+        Remove-Item -LiteralPath $UnlockTarget -Force
+        Remove-Item (Split-Path $UnlockTarget) -ErrorAction SilentlyContinue
+    } catch {
+        Add-Type -Namespace Wake -Name Native -MemberDefinition @'
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+public static extern bool MoveFileEx(string existing, string replacement, int flags);
+'@
+        [void][Wake.Native]::MoveFileEx($UnlockTarget, $null, 4)  # MOVEFILE_DELAY_UNTIL_REBOOT
+        Write-Output "$UnlockTarget is in use; it will be deleted at the next reboot."
+    }
+}
+
 # Exact keyword match: '*' in keywords like '*EEE' would otherwise act as a wildcard.
 function Get-AdapterProperty($adapterName, $keyword) {
     Get-NetAdapterAdvancedProperty -Name $adapterName -ErrorAction SilentlyContinue |
@@ -96,7 +140,8 @@ if ($Uninstall) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $RuleNames | ForEach-Object { Remove-NetFirewallRule -DisplayName $_ -ErrorAction SilentlyContinue }
     Remove-Item $InstallDir, $SecretDir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Output 'Wake agent removed: logon task, firewall rules, files and pairing.'
+    Remove-UnlockModule
+    Write-Output 'Wake agent removed: logon task, firewall rules, files, pairing and the fingerprint unlock module.'
     Write-Output 'Network adapter and Fast Startup settings were left as they are.'
     return
 }
@@ -198,6 +243,35 @@ if (-not $ok -and -not $Check) {
     $ok = $true
 }
 Add-Result "Scheduled task '$TaskName'" $(if ($task) { 'present' } else { 'missing' }) 'runs agent at logon' $ok
+
+# 6. Fingerprint unlock module (opt-in). Already installed counts as yes, so a re-run updates it.
+$unlockInstalled = Test-UnlockModule
+$wantUnlock = $Unlock -or ($unlockInstalled -and -not $NoUnlock)
+if (-not $Check -and -not $Unlock -and -not $NoUnlock -and -not $unlockInstalled) {
+    $wantUnlock = (Read-Host 'Turn on fingerprint unlock? (y/N)') -match '^\s*y'
+}
+$note = ''
+if (-not $Check) {
+    if ($wantUnlock -and $UnlockDll -and (Test-Path -LiteralPath $UnlockDll)) {
+        try {
+            Install-UnlockModule $UnlockDll
+        } catch {
+            $note = "couldn't copy the DLL (in use by the lock screen?): $($_.Exception.Message)"
+        }
+    } elseif ($wantUnlock) {
+        $note = 'WakeCredentialProvider.dll not found; build it with credential-provider\build.cmd'
+    } elseif ($NoUnlock -and $unlockInstalled) {
+        Remove-UnlockModule
+    }
+}
+$nowInstalled = Test-UnlockModule
+Add-Result 'Fingerprint unlock module' $(if ($nowInstalled) { 'installed' } else { 'not installed' }) `
+    $(if ($wantUnlock) { 'installed' } else { 'optional' }) ($nowInstalled -or -not $wantUnlock) $note
+
+# Reported only: "only allow Windows Hello sign-in for Microsoft accounts" can hide password-based tiles.
+$helloOnly = (Get-ItemProperty $PasswordLessKey -Name DevicePasswordLessBuildVersion -ErrorAction SilentlyContinue).DevicePasswordLessBuildVersion -eq 2
+Add-Result 'Windows Hello-only sign-in' $(if ($helloOnly) { 'on' } else { 'off' }) 'off' (-not ($helloOnly -and $nowInstalled)) `
+    $(if ($helloOnly) { 'may hide the Wake tile: Settings > Accounts > Sign-in options, turn off "only allow Windows Hello sign-in"' } else { '' })
 
 if (-not $Check) {
     Stop-Agent

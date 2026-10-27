@@ -18,7 +18,7 @@ echo.
 
 if exist "WakeAgent\WakeAgent.exe" (
     rem Release download: the agent ships with its own Java runtime.
-    powershell -NoProfile -ExecutionPolicy Bypass -File "pc-setup\setup.ps1" -AgentDir "WakeAgent"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "pc-setup\setup.ps1" -AgentDir "WakeAgent" -UnlockDll "unlock\WakeCredentialProvider.dll"
     goto done
 )
 
@@ -33,7 +33,10 @@ if not exist "agent\build\libs\wake-agent.jar" (
         exit /b 1
     )
 )
-powershell -NoProfile -ExecutionPolicy Bypass -File "pc-setup\setup.ps1" -AgentJar "agent\build\libs\wake-agent.jar"
+rem The unlock module is optional here: build it first with credential-provider\build.cmd.
+set "UNLOCK_DLL=credential-provider\build\Release\WakeCredentialProvider.dll"
+if defined WAKE_CP_BUILD set "UNLOCK_DLL=%WAKE_CP_BUILD%\Release\WakeCredentialProvider.dll"
+powershell -NoProfile -ExecutionPolicy Bypass -File "pc-setup\setup.ps1" -AgentJar "agent\build\libs\wake-agent.jar" -UnlockDll "%UNLOCK_DLL%"
 
 :done
 if errorlevel 1 (

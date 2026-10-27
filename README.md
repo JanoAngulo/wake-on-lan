@@ -79,6 +79,16 @@ Have more than one PC? Tap the PC name at the top to switch, or use **Settings**
 - **Log in after waking.** Waking works any time, but shut down, reboot, sleep and lock work once you're logged in on the PC, because the agent runs in your session.
 - **Only your phone can send commands.** Pairing uses a key exchange confirmed by the 6-digit code, and every command is signed. Other devices on your Wi-Fi can't shut your PC down.
 
+## Fingerprint unlock (optional)
+
+When the PC is locked (after Lock, or after waking from sleep), tap **Unlock** in Wake and touch the fingerprint sensor. The PC unlocks without you typing anything.
+
+- **Turn it on:** run **Install Wake Agent.cmd** and answer `y` to *Turn on fingerprint unlock?* It adds a "Wake" option to the lock screen. Your usual password and PIN options stay.
+- **On the phone:** Settings → your PC → **Fingerprint unlock**. Enter the Windows password once: your Microsoft account or local account password, **not the PIN**.
+- **Where the password lives:** only on the phone, locked by your fingerprint (the phone's PIN works as backup). It's sent to the PC encrypted and never saved there.
+- **Not after a restart.** It unlocks a locked session. After a shutdown or reboot, sign in on the PC as usual.
+- If the PC rejects the saved password (you changed it), Wake deletes it and asks again. It never retries on its own, so it can't lock your account.
+
 ## Troubleshooting
 
 | Problem | Try this |
@@ -114,7 +124,8 @@ Requirements: JDK 21 and the Android SDK (platform 36). Gradle is included throu
 ```bash
 ./gradlew test                    # unit tests for every module
 ./gradlew :app:assembleRelease    # app/build/outputs/apk/release/app-release.apk
-./gradlew :agent:agentZip         # build/release/WakeAgent-Windows.zip (agent + bundled Java runtime)
+credential-provider\build.cmd     # WakeCredentialProvider.dll (needs VS 2022 Build Tools, C++ workload)
+./gradlew :agent:agentZip         # build/release/WakeAgent-Windows.zip (agent + bundled Java runtime + unlock DLL)
 ./gradlew :agent:agentJar         # agent/build/libs/wake-agent.jar (runs on an installed JDK 21)
 ```
 
