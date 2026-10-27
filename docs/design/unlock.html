@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wake unlock mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0F1728; --surface:#18223A; --line:#26345A; --text:#E8EEFA; --muted:#A3B1CC;
+    --ok:#5BD69A; --oktext:#7BE3AE; --neutral:#B9C6E0; --danger:#FF9A9A; --dangerbg:#33192A; --dangerline:#55283B;
+    --disc:#D3DCF0; --page:#0A101C;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px 16px 64px; background:var(--page); color:var(--text); font-family:"Manrope", system-ui, sans-serif; }
+  .layout { display:flex; flex-wrap:wrap; gap:40px; justify-content:center; align-items:flex-start; }
+  figure { margin:0; }
+  figcaption { margin:0 0 12px 8px; font-size:15px; font-weight:700; color:var(--muted); }
+
+  /* Device frame, true size 412 x 891 dp */
+  .ph { width:412px; border-radius:48px; padding:12px; background:#050505; box-shadow:0 18px 40px rgba(0,0,0,.45); }
+  .scr { position:relative; height:891px; border-radius:36px; overflow:hidden; background:var(--bg); font-variant-numeric:tabular-nums; }
+  .i { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; width:22px; height:22px; flex:none; }
+  .sb { display:flex; justify-content:space-between; height:32px; align-items:center; padding:0 26px; font-size:13px; opacity:.85; }
+
+  /* Main screen header */
+  .hd { position:relative; height:318px; color:#fff; border-radius:0 0 50% 50% / 0 0 40px 40px; overflow:hidden;
+    background:radial-gradient(ellipse 60% 55% at 50% 56%, rgba(91,214,154,.28), transparent 70%), linear-gradient(165deg, #1C2C55 10%, #3A62AE 100%); }
+  .top { display:flex; justify-content:space-between; align-items:center; height:56px; padding:0 8px 0 24px; }
+  .top .name { font-size:22px; font-weight:700; letter-spacing:-.01em; }
+  .iconbtn { width:48px; height:48px; display:grid; place-items:center; }
+  .hero { position:absolute; left:50%; top:104px; width:148px; height:148px; margin-left:-74px; border-radius:50%; display:grid; place-items:center;
+    background:rgba(91,214,154,.10); border:3px solid var(--ok); color:var(--oktext); box-shadow:0 0 36px rgba(91,214,154,.30); }
+  .hero .i { width:56px; height:56px; stroke-width:2.1; }
+  .hcap { position:absolute; left:0; right:0; top:266px; display:flex; justify-content:center; align-items:center; gap:10px; font-size:16px; font-weight:500; }
+
+  .kv { margin:20px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:24px; }
+  .kv .r { display:grid; grid-template-columns:128px 1fr; align-items:center; column-gap:12px; min-height:56px; padding:8px 20px; }
+  .kv .r + .r { border-top:1px solid var(--line); }
+  .kv .k { color:var(--muted); font-size:14px; display:flex; align-items:center; gap:10px; }
+  .kv .k .i { width:20px; height:20px; }
+  .kv .v { font-size:16px; font-weight:600; display:flex; align-items:center; gap:10px; }
+  .kv .v em { font-style:normal; font-weight:500; font-size:14px; color:var(--muted); }
+
+  .pill { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:999px; font-size:14px; font-weight:700; }
+  .pill .i { width:16px; height:16px; stroke-width:2.4; }
+  .pill.ok { color:var(--oktext); background:rgba(91,214,154,.14); border:1px solid rgba(91,214,154,.38); }
+  .pill.neutral { color:var(--neutral); background:rgba(163,177,204,.10); border:1px solid rgba(163,177,204,.30); }
+  .pill.lockpill { color:#fff; background:rgba(15,23,40,.38); border:1px solid rgba(255,255,255,.28); }
+
+  .acts { margin:24px 16px 0; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .b { display:flex; align-items:center; gap:12px; height:60px; padding:0 20px; border-radius:20px; font:inherit; font-size:16px; font-weight:600;
+    color:var(--text); background:var(--surface); border:1px solid var(--line); }
+  .b.wide { grid-column:1/-1; }
+  .b.danger { color:var(--danger); background:var(--dangerbg); border-color:var(--dangerline); }
+  .b.primary-big { height:68px; font-size:17px; }
+  .b small { margin-left:auto; font-size:13px; font-weight:500; opacity:.9; }
+  /* Unlock: the one thing you want while the lock screen is up, so it takes the light primary fill. */
+  .b.unlock { background:var(--disc); color:var(--bg); border-color:var(--disc); }
+  .b.busy { color:var(--muted); }
+  .spinner { width:20px; height:20px; border-radius:50%; border:2.5px solid rgba(232,238,250,.22); border-top-color:var(--text); flex:none; }
+
+  .sec { margin:28px 20px 10px 24px; font-size:15px; font-weight:700; color:var(--muted); }
+
+  /* Settings screens (ScreenScaffold) */
+  .bar { display:flex; align-items:center; height:56px; padding:0 4px; }
+  .bar .iconbtn { color:var(--text); }
+  .bar h1 { margin:0 0 0 4px; font-size:22px; font-weight:700; }
+  .body { padding:8px 16px 0; display:flex; flex-direction:column; gap:12px; }
+  .p { margin:0; padding:0 8px; font-size:16px; line-height:1.5; color:var(--muted); }
+  .label { margin:12px 0 0 8px; font-size:15px; font-weight:700; color:var(--muted); }
+  .field { position:relative; height:60px; border-radius:20px; background:var(--surface); border:2px solid var(--disc);
+    display:flex; align-items:center; padding:0 6px 0 18px; font-size:18px; letter-spacing:.18em; }
+  .field .flabel { position:absolute; top:-10px; left:14px; padding:0 4px; background:var(--bg); font-size:12px; font-weight:600; letter-spacing:0; color:var(--disc); }
+  .field .eye { margin-left:auto; width:48px; height:48px; display:grid; place-items:center; color:var(--muted); }
+  .note { margin:-6px 0 0; padding:0 8px; font-size:13px; line-height:1.45; color:var(--muted); text-wrap:pretty; }
+  .btn { height:56px; border-radius:20px; display:flex; align-items:center; justify-content:center; gap:10px; font-size:16px; font-weight:700; }
+  .btn.primary { background:var(--disc); color:var(--bg); }
+  .btn.secondary { background:var(--surface); border:1px solid var(--line); color:var(--text); }
+  .btn.dangerbtn { background:var(--dangerbg); border:1px solid var(--dangerline); color:var(--danger); }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:24px; }
+  .row { display:flex; align-items:center; gap:14px; min-height:60px; padding:10px 20px; }
+  .row .t { font-size:16px; font-weight:600; }
+  .row .s { font-size:14px; color:var(--muted); margin-top:2px; }
+  .row .grow { flex:1; }
+  .info { display:flex; gap:12px; align-items:flex-start; padding:14px 16px; border-radius:14px; background:rgba(91,214,154,.08); border:1px solid rgba(91,214,154,.30);
+    color:var(--text); font-size:15px; line-height:1.45; text-wrap:balance; }
+  .info .i { color:var(--oktext); width:20px; height:20px; margin-top:1px; }
+
+  .snack { position:absolute; left:14px; right:14px; bottom:24px; display:flex; align-items:center; min-height:52px; padding:0 18px; border-radius:16px;
+    background:#E8EEFA; color:#0F1728; font-size:15px; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,.45); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="fp" viewBox="0 0 24 24"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></symbol>
+    <symbol id="power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.4 7a8 8 0 1 0 11.2 0"/></symbol>
+    <symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
+    <symbol id="reboot" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.5h-4.5"/></symbol>
+    <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></symbol>
+    <symbol id="pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  </defs>
+</svg>
+
+<div class="layout">
+
+  <!-- 1. PC on, lock screen up -->
+  <figure>
+    <figcaption>1 · PC locked: Lock becomes Unlock</figcaption>
+    <div class="ph"><div class="scr">
+      <div class="hd">
+        <div class="sb"><span>23:41</span><span>Wi-Fi</span></div>
+        <div class="top"><span class="name">MY-PC</span><span class="iconbtn"><svg class="i"><use href="#gear"/></svg></span></div>
+        <div class="hero"><svg class="i"><use href="#power"/></svg></div>
+        <div class="hcap"><span class="pill lockpill"><svg class="i"><use href="#lock"/></svg>Locked</span><span>On for 2h 14m</span></div>
+      </div>
+      <div class="kv">
+        <div class="r"><span class="k"><svg class="i"><use href="#globe"/></svg>IP address</span><span class="v">192.168.1.14</span></div>
+        <div class="r"><span class="k"><svg class="i"><use href="#pulse"/></svg>Response</span><span class="v"><span class="pill ok">2 ms</span><em>steady</em></span></div>
+      </div>
+      <div class="acts">
+        <div class="b"><svg class="i"><use href="#moon"/></svg>Sleep</div>
+        <div class="b unlock"><svg class="i"><use href="#fp"/></svg>Unlock</div>
+        <div class="b wide danger"><svg class="i"><use href="#reboot"/></svg>Reboot<small>Hold 1s</small></div>
+        <div class="b wide danger primary-big"><svg class="i"><use href="#power"/></svg>Shut down<small>Hold 1s</small></div>
+      </div>
+      <div class="sec">Network</div>
+    </div></div>
+  </figure>
+
+  <!-- 2. Unlocking, then result snackbar -->
+  <figure>
+    <figcaption>2 · Unlocking… then snackbar "MY-PC unlocked", Lock returns</figcaption>
+    <div class="ph"><div class="scr">
+      <div class="hd">
+        <div class="sb"><span>23:41</span><span>Wi-Fi</span></div>
+        <div class="top"><span class="name">MY-PC</span><span class="iconbtn"><svg class="i"><use href="#gear"/></svg></span></div>
+        <div class="hero"><svg class="i"><use href="#power"/></svg></div>
+        <div class="hcap"><span class="pill lockpill"><svg class="i"><use href="#lock"/></svg>Locked</span><span>On for 2h 14m</span></div>
+      </div>
+      <div class="kv">
+        <div class="r"><span class="k"><svg class="i"><use href="#globe"/></svg>IP address</span><span class="v">192.168.1.14</span></div>
+        <div class="r"><span class="k"><svg class="i"><use href="#pulse"/></svg>Response</span><span class="v"><span class="pill ok">2 ms</span><em>steady</em></span></div>
+      </div>
+      <div class="acts">
+        <div class="b"><svg class="i"><use href="#moon"/></svg>Sleep</div>
+        <div class="b busy"><span class="spinner"></span>Unlocking…</div>
+        <div class="b wide danger"><svg class="i"><use href="#reboot"/></svg>Reboot<small>Hold 1s</small></div>
+        <div class="b wide danger primary-big"><svg class="i"><use href="#power"/></svg>Shut down<small>Hold 1s</small></div>
+      </div>
+      <div class="sec">Network</div>
+    </div></div>
+  </figure>
+
+  <!-- 3. Setup -->
+  <figure>
+    <figcaption>3 · Settings › MY-PC › Fingerprint unlock</figcaption>
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>23:41</span><span>Wi-Fi</span></div>
+      <div class="bar"><span class="iconbtn"><svg class="i"><use href="#back"/></svg></span><h1>Fingerprint unlock</h1></div>
+      <div class="body">
+        <p class="p">Unlock MY-PC's lock screen with your fingerprint. Wake keeps the Windows password on this phone, locked by your fingerprint. It never stays on the PC.</p>
+        <div class="field" style="margin-top:12px"><span class="flabel">Windows password</span>••••••••••<span class="eye"><svg class="i"><use href="#eye"/></svg></span></div>
+        <p class="note">Your Microsoft account or local account password. A PIN won't work.</p>
+        <div class="btn primary"><svg class="i"><use href="#fp"/></svg>Save with fingerprint</div>
+      </div>
+    </div></div>
+  </figure>
+
+  <!-- 4. Saved -->
+  <figure>
+    <figcaption>4 · Saved</figcaption>
+    <div class="ph"><div class="scr">
+      <div class="sb"><span>23:41</span><span>Wi-Fi</span></div>
+      <div class="bar"><span class="iconbtn"><svg class="i"><use href="#back"/></svg></span><h1>Fingerprint unlock</h1></div>
+      <div class="body">
+        <p class="p">Unlock MY-PC's lock screen with your fingerprint. Wake keeps the Windows password on this phone, locked by your fingerprint. It never stays on the PC.</p>
+        <div class="card"><div class="row"><svg class="i" style="color:var(--muted)"><use href="#fp"/></svg><div class="grow"><div class="t">Fingerprint unlock</div></div><span class="pill ok"><svg class="i"><use href="#check"/></svg>On</span></div></div>
+        <div class="info"><svg class="i"><use href="#check"/></svg><span>Saved. Lock your PC and tap Unlock to try it.</span></div>
+        <div class="btn dangerbtn">Remove</div>
+      </div>
+    </div></div>
+  </figure>
+
+</div>
+</body>
+</html>
