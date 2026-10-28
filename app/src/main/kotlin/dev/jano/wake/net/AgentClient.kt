@@ -9,6 +9,9 @@ import dev.jano.wake.protocol.ErrorBody
 import dev.jano.wake.protocol.H_NONCE
 import dev.jano.wake.protocol.H_SIGNATURE
 import dev.jano.wake.protocol.H_TIMESTAMP
+import dev.jano.wake.protocol.PATH_SIGNIN_STATUS
+import dev.jano.wake.protocol.PATH_SIGNIN_UNLOCK
+import dev.jano.wake.protocol.SignInStatus
 import dev.jano.wake.protocol.StatusResponse
 import dev.jano.wake.protocol.UnlockRequest
 import dev.jano.wake.protocol.UnlockResponse
@@ -59,6 +62,14 @@ class AgentClient(
     /** Sealed per attempt: the ciphertext is bound to that attempt's nonce. */
     suspend fun unlock(password: ByteArray): UnlockResponse =
         call("POST", "/unlock", { nonce ->
+            WakeJson.encodeToString(UnlockRequest.serializer(), sealPassword(secret, nonce, password))
+        }, UnlockResponse.serializer(), unlockHttp)
+
+    // The pre-login sign-in program. Build this client with signInKey(secret) and Ports.SIGNIN for these two.
+    suspend fun signInStatus(): SignInStatus = call("GET", PATH_SIGNIN_STATUS, null, SignInStatus.serializer())
+
+    suspend fun signInUnlock(password: ByteArray): UnlockResponse =
+        call("POST", PATH_SIGNIN_UNLOCK, { nonce ->
             WakeJson.encodeToString(UnlockRequest.serializer(), sealPassword(secret, nonce, password))
         }, UnlockResponse.serializer(), unlockHttp)
 

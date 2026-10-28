@@ -97,6 +97,7 @@ class MainViewModelTest {
         },
         prober = HostProber { _, _ -> polls++; if (hostUp) ProbeResult.Up(2) else ProbeResult.Down },
         agents = AgentApiFactory { _, _ -> agentApi },
+        signIns = SignInApiFactory { _, _ -> error("unused") },
         discoverer = Discoverer {
             discoveries++
             kotlinx.coroutines.delay(discoveryDelayMs)

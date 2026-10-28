@@ -22,7 +22,10 @@ import dev.jano.wake.protocol.CommandResponse
 import dev.jano.wake.protocol.DiscoveryReply
 import dev.jano.wake.protocol.MacAddress
 import dev.jano.wake.protocol.StatusResponse
+import dev.jano.wake.protocol.Ports
+import dev.jano.wake.protocol.SignInStatus
 import dev.jano.wake.protocol.UnlockResponse
+import dev.jano.wake.protocol.signInKey
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -36,6 +39,15 @@ interface AgentApi {
 }
 
 fun interface AgentApiFactory { fun create(device: Device, secret: ByteArray): AgentApi }
+
+/** The PC's pre-login sign-in program: answers only while the sign-in or lock screen is up. */
+interface SignInApi {
+    suspend fun status(): SignInStatus
+    suspend fun unlock(password: ByteArray): UnlockResponse
+}
+
+/** [secret] is the pairing secret; the real factory derives the sign-in key from it. */
+fun interface SignInApiFactory { fun create(device: Device, secret: ByteArray): SignInApi }
 
 fun interface Discoverer { suspend fun discover(broadcast: String): List<DiscoveryReply> }
 
@@ -51,6 +63,7 @@ class AppGraph(
     val secrets: Secrets,
     val prober: HostProber,
     val agents: AgentApiFactory,
+    val signIns: SignInApiFactory,
     val discoverer: Discoverer,
     val phoneNet: PhoneNetReader,
     val waker: Waker,
@@ -82,6 +95,13 @@ class AppGraph(
                         override suspend fun command(action: Action) = client.command(action)
                         override suspend fun cancel(id: String) = client.cancel(id)
                         override suspend fun unlock(password: ByteArray) = client.unlock(password)
+                    }
+                },
+                signIns = SignInApiFactory { device, secret ->
+                    val client = AgentClient(http, "http://${device.lastIp}:${Ports.SIGNIN}", signInKey(secret), System::currentTimeMillis)
+                    object : SignInApi {
+                        override suspend fun status() = client.signInStatus()
+                        override suspend fun unlock(password: ByteArray) = client.signInUnlock(password)
                     }
                 },
                 discoverer = Discoverer { broadcast -> discoverAgents(broadcast, timeoutMs = 1_500) },

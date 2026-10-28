@@ -23,6 +23,10 @@ import dev.jano.wake.protocol.UnlockRequest
 import dev.jano.wake.protocol.UnlockResponse
 import dev.jano.wake.protocol.UnlockResult
 import dev.jano.wake.protocol.openPassword
+import dev.jano.wake.protocol.PATH_SIGNIN_STATUS
+import dev.jano.wake.protocol.PATH_SIGNIN_UNLOCK
+import dev.jano.wake.protocol.SignInStatus
+import dev.jano.wake.protocol.signInKey
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -145,5 +149,31 @@ class AgentClientTest {
     fun unlockParsesResult(): Unit = runBlocking {
         server.enqueue(unlockReply(UnlockResult.WRONG_PASSWORD))
         assertEquals(UnlockResult.WRONG_PASSWORD, client.unlock("x".toByteArray()).result)
+    }
+
+    @Test
+    fun signInStatusIsSignedWithSignInKeyOnSignInPath(): Unit = runBlocking {
+        val key = signInKey(secret)
+        val signIn = AgentClient(OkHttpClient(), server.url("/").toString().trimEnd('/'), key) { now }
+        val reply = SignInStatus("0A:1B:2C:3D:4E:5F", now, signInScreen = true)
+        server.enqueue(json(200, WakeJson.encodeToString(SignInStatus.serializer(), reply)))
+        assertEquals(reply, signIn.signInStatus())
+
+        val request = server.takeRequest()
+        assertEquals(PATH_SIGNIN_STATUS, request.url.encodedPath)
+        assertEquals(VerifyResult.OK, RequestVerifier({ key }, { now }).verify("GET", PATH_SIGNIN_STATUS, ByteArray(0), headersOf(request)))
+    }
+
+    @Test
+    fun signInUnlockSealsWithClientKey(): Unit = runBlocking {
+        val key = signInKey(secret)
+        val signIn = AgentClient(OkHttpClient(), server.url("/").toString().trimEnd('/'), key) { now }
+        server.enqueue(unlockReply())
+        assertEquals(UnlockResult.UNLOCKED, signIn.signInUnlock("pässwörd".toByteArray()).result)
+
+        val request = server.takeRequest()
+        assertEquals(PATH_SIGNIN_UNLOCK, request.url.encodedPath)
+        val body = WakeJson.decodeFromString(UnlockRequest.serializer(), request.body!!.utf8())
+        assertContentEquals("pässwörd".toByteArray(), openPassword(key, request.headers[H_NONCE]!!, body))
     }
 }
