@@ -1,7 +1,5 @@
 package dev.jano.wake.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +8,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +45,6 @@ import dev.jano.wake.ui.setup.ManualDeviceForm
 import dev.jano.wake.ui.setup.PairScreen
 import dev.jano.wake.ui.setup.SetupViewModel
 import dev.jano.wake.ui.theme.WakeColors
-import kotlinx.coroutines.launch
 
 private object Routes {
     const val FIND = "setup/find"
@@ -136,25 +132,10 @@ fun WakeNavHost() {
             )
         }
         composable(Routes.SETTINGS) {
-            val scope = rememberCoroutineScope()
             val message by settingsVm.message.collectAsStateWithLifecycle()
-            val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-                if (uri != null) scope.launch {
-                    val json = settingsVm.exportJson()
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
-                    settingsVm.exported()
-                }
-            }
-            val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                if (uri != null) {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }?.let(settingsVm::importJson)
-                }
-            }
             SettingsScreen(
                 message = message,
                 onDevices = { nav.navigate(Routes.DEVICES) },
-                onImport = { import.launch(arrayOf("application/json", "text/plain")) },
-                onExport = { export.launch("wake-devices.json") },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },
                 onHelp = { nav.navigate(Routes.HELP) },
                 onGuide = { nav.navigate(Routes.GUIDE) },
