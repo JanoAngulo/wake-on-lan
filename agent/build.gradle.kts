@@ -45,6 +45,7 @@ val agentImage = tasks.register<Exec>("agentImage") {
     dependsOn("agentJar")
     val jar = layout.buildDirectory.file("libs/wake-agent.jar")
     inputs.file(jar)
+    inputs.file("jpackage/WakeSignIn.properties")
     outputs.dir(agentImageDir)
     doFirst {
         delete(agentImageDir)
@@ -63,6 +64,8 @@ val agentImage = tasks.register<Exec>("agentImage") {
         "--input", layout.buildDirectory.dir("jpackage-input").get().asFile.path,
         "--main-jar", "wake-agent.jar",
         "--main-class", "dev.jano.wake.agent.MainKt",
+        // Second launcher on the same runtime: the pre-login sign-in program, started by a startup task.
+        "--add-launcher", "WakeSignIn=" + file("jpackage/WakeSignIn.properties").path,
         "--add-modules", "java.base,java.desktop,java.logging,jdk.httpserver,jdk.crypto.ec",
         "--jlink-options", "--strip-debug --no-header-files --no-man-pages",
         "--dest", agentImageDir.get().asFile.path,
