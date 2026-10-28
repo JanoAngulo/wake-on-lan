@@ -1,12 +1,16 @@
 package dev.jano.wake.agent.signin
 
-import com.sun.jna.platform.win32.Advapi32
-import com.sun.jna.platform.win32.Advapi32Util
-import com.sun.jna.platform.win32.Kernel32
-import com.sun.jna.platform.win32.WinNT
+import dev.jano.wake.agent.AGENT_VERSION
+import dev.jano.wake.agent.NicInfo
+import dev.jano.wake.agent.WindowsSystem
+import dev.jano.wake.agent.pickLanInterface
+import dev.jano.wake.agent.unlock.PipeUnlockRelay
+import dev.jano.wake.agent.unlock.UnlockRelay
 import dev.jano.wake.agent.unlock.WindowsPipeHost
+import dev.jano.wake.protocol.Ports
 import java.io.File
 import java.io.RandomAccessFile
+import java.net.InetSocketAddress
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.concurrent.Executors
@@ -14,7 +18,8 @@ import java.util.concurrent.TimeUnit
 import kotlin.io.path.Path
 import kotlin.system.exitProcess
 
-// Spike (plan Task 1): proves the startup task runs before sign-in, under its own task SID, and sees the pipe.
+// The pre-login sign-in program. A startup task runs it as LOCAL SERVICE with its own task SID, before
+// anyone signs in. It listens on Ports.SIGNIN only while the lock or sign-in screen is up.
 
 fun signInLogDir(): Path = Path(System.getenv("ProgramData") ?: "C:\\ProgramData", "Wake", "logs")
 
@@ -24,36 +29,66 @@ private fun log(message: String) {
     logFile.appendText("${LocalDateTime.now()} $message\n")
 }
 
-/** "user=<sid> groups=<sid>,<sid>,…" for this process's token. */
-private fun tokenSids(): String {
-    val token = WinNT.HANDLEByReference()
-    if (!Advapi32.INSTANCE.OpenProcessToken(Kernel32.INSTANCE.GetCurrentProcess(), WinNT.TOKEN_QUERY, token)) {
-        return "token unreadable: ${Kernel32.INSTANCE.GetLastError()}"
-    }
-    return try {
-        val user = Advapi32Util.getTokenAccount(token.value).sidString
-        val groups = Advapi32Util.getTokenGroups(token.value).joinToString(",") { it.sidString }
-        "user=$user groups=$groups"
-    } finally {
-        Kernel32.INSTANCE.CloseHandle(token.value)
-    }
-}
-
 fun main(args: Array<String>) {
     val dir = signInLogDir().toFile()
     if (!dir.isDirectory) exitProcess(1)  // the installer creates it with the right ACL; never create it here
     val lock = RandomAccessFile(File(dir, "signin.lock"), "rw").channel.tryLock() ?: exitProcess(0)
 
-    log("started ${tokenSids()}")
+    log("sign-in $AGENT_VERSION starting")
+    val keys = SignInKeyStore(signInDataDir(), DpapiMachineProtector)
     val host = WindowsPipeHost()
-    var last: Boolean? = null
+    val pipeRelay = PipeUnlockRelay(host, ::log)
+    // Results only: the password never reaches the log.
+    val relay = object : UnlockRelay by pipeRelay {
+        override fun relay(passwordUtf8: ByteArray) = pipeRelay.relay(passwordUtf8).also { log("unlock: ${it.result}") }
+    }
+
+    // Everything below runs on this one thread, so the gate and the adapter refresh never race.
     val timer = Executors.newSingleThreadScheduledExecutor()
-    timer.scheduleWithFixedDelay({
-        runCatching {
-            val now = host.pipeExists()
-            if (now != last) log("pipe=$now")
-            last = now
-        }.onFailure { log("pipe check failed: ${it.message}") }
-    }, 0, 1, TimeUnit.SECONDS)
-    Runtime.getRuntime().addShutdownHook(Thread { lock.release() })
+    var nic: NicInfo? = null
+    var server: SignInServer? = null
+    var lastPipe: Boolean? = null
+
+    fun openServer() {
+        val lan = nic ?: error("no LAN adapter")
+        val next = SignInServer(InetSocketAddress(lan.ipv4, Ports.SIGNIN), { lan.mac!! }, keys::load, System::currentTimeMillis, relay)
+        next.start()
+        server = next
+        log("open on ${lan.ipv4}:${Ports.SIGNIN}")
+    }
+
+    fun closeServer() {
+        server?.stop()
+        server = null
+        log("closed")
+    }
+
+    val gate = SignInGate(
+        pipeExists = {
+            host.pipeExists().also {
+                if (it != lastPipe) log("pipe=$it")
+                lastPipe = it
+            }
+        },
+        inFlight = { server?.busy() == true },
+        clock = System::currentTimeMillis,
+        open = ::openServer,
+        close = ::closeServer,
+        log = ::log,
+    )
+
+    fun refreshAdapter() {
+        val next = pickLanInterface(WindowsSystem.nics(), WindowsSystem.defaultGateway())
+        if (next?.ipv4 == nic?.ipv4) return
+        log(if (next == null) "LAN adapter gone" else "LAN adapter ${next.ipv4}")
+        nic = next
+        gate.reset()  // reopens on the new address at the next tick, if the screen is still up
+    }
+
+    timer.scheduleWithFixedDelay({ runCatching { refreshAdapter() }.onFailure { log("refresh failed: ${it.message}") } }, 0, 30, TimeUnit.SECONDS)
+    timer.scheduleWithFixedDelay({ runCatching { gate.tick() }.onFailure { log("tick failed: ${it.message}") } }, 0, 1, TimeUnit.SECONDS)
+    Runtime.getRuntime().addShutdownHook(Thread {
+        runCatching { server?.stop() }
+        lock.release()
+    })
 }
