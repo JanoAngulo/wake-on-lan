@@ -173,7 +173,11 @@ function Remove-UnlockModule {
     }
 }
 
-function Test-SignIn { [bool](Get-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $SignInExe) }
+# Without admin rights Windows hides the LOCAL SERVICE task, so -Check falls back to the installed program.
+function Test-SignIn {
+    if (-not (Test-Path -LiteralPath $SignInExe)) { return $false }
+    [bool](Get-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue) -or -not (Test-Admin)
+}
 
 function Stop-SignIn {
     Stop-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue
@@ -220,7 +224,17 @@ function Install-SignIn($sourceDir) {
         -Description 'Lets your paired phone sign you in at the Windows sign-in screen.' -Force | Out-Null
 
     $taskSid = ([Security.Principal.NTAccount]$SignInAccount).Translate([Security.Principal.SecurityIdentifier]).Value
-    $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $userSid = $me.User.Value
+    # Already set up for another account (say, run again from a different admin)? Ask before moving it: the
+    # other account's phone would otherwise send its password to this account's tile and lose it.
+    $savedSid = (Get-ItemProperty $WakeKey -Name SignInUserSid -ErrorAction SilentlyContinue).SignInUserSid
+    if ($savedSid -and $savedSid -ne $userSid) {
+        $savedName = try { ([Security.Principal.SecurityIdentifier]$savedSid).Translate([Security.Principal.NTAccount]).Value } catch { $savedSid }
+        if ((Read-Host "Sign-in after shutdown is set up for $savedName. Switch it to $($me.Name)? (y/N)") -notmatch '^\s*y') {
+            $userSid = $savedSid
+        }
+    }
     # Anyone can create folders in ProgramData, so one of these may already exist and belong to someone else.
     # Take ownership for Administrators first, wipe whatever ACL is there, then grant exactly what's needed.
     # If any step fails, undo the install: a half-secured folder must never receive the key.
@@ -282,6 +296,8 @@ if ($Uninstall) {
 }
 
 # Which agent are we installing, and what program will run it?
+# Run from the unzipped download without -AgentDir (as the help tells people to for -Check): use its WakeAgent folder.
+if (-not $AgentDir -and (Test-Path (Join-Path $PSScriptRoot '..\WakeAgent\WakeAgent.exe'))) { $AgentDir = Join-Path $PSScriptRoot '..\WakeAgent' }
 $bundled = [bool]$AgentDir
 if ($bundled) {
     $sourceDir = Resolve-Path $AgentDir -ErrorAction SilentlyContinue
@@ -430,9 +446,13 @@ $signInNow = Test-SignIn
 Add-Result 'Sign-in after shutdown' $(if ($signInNow) { 'installed' } else { 'not installed' }) `
     $(if ($wantSignIn) { 'installed' } else { 'optional' }) ($signInNow -or -not $wantSignIn) $note
 if ($signInNow) {
-    $task = Get-ScheduledTask -TaskName $SignInTask
-    $principalOk = $task.Principal.UserId -match 'LOCAL ?SERVICE' -and "$($task.Principal.ProcessTokenSidType)" -eq 'Unrestricted'
-    Add-Result "Task '$SignInTask'" "$($task.State), $($task.Principal.UserId)" 'LOCAL SERVICE with its task SID' ($principalOk -and $task.State -ne 'Disabled')
+    $task = Get-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue
+    if ($task) {
+        $principalOk = $task.Principal.UserId -match 'LOCAL ?SERVICE' -and "$($task.Principal.ProcessTokenSidType)" -eq 'Unrestricted'
+        Add-Result "Task '$SignInTask'" "$($task.State), $($task.Principal.UserId)" 'LOCAL SERVICE with its task SID' ($principalOk -and $task.State -ne 'Disabled')
+    } else {
+        Add-Result "Task '$SignInTask'" 'unknown (needs admin)' 'LOCAL SERVICE with its task SID' $true
+    }
     $rule = Get-NetFirewallRule -DisplayName $SignInRule -ErrorAction SilentlyContinue
     $ruleProgram = if ($rule) { ($rule | Get-NetFirewallApplicationFilter).Program } else { $null }
     Add-Result "Firewall: $SignInRule" $(if ($rule) { 'present' } else { 'missing' }) "allow TCP $SignInPort from LocalSubnet" ($ruleProgram -eq $SignInExe)
