@@ -28,22 +28,23 @@ import dev.jano.wake.ui.theme.WakeType
 
 private class Fact(val icon: ImageVector, val title: String, val body: String)
 
-// Every claim here must stay true to the code: no analytics, allowBackup="false", SecretVault (Keystore),
-// KeystoreUnlockPasswords (biometric-bound), SecretStore (user-only ACL), DPAPI sign-in key, logs without passwords.
+// Every claim here must stay true to the code: no analytics, allowBackup="false" plus data_extraction_rules,
+// SecretVault (Keystore), KeystoreUnlockPasswords (biometric-bound), SecretStore (user-only ACL), the sign-in key's
+// folder ACL (SignInKeyStore trusts only the installer's folder), logs without passwords.
 private val sections = listOf(
     "What Wake sends" to listOf(
-        Fact(WakeIcons.Wifi, "Only to your own PCs", "Wake talks to the PCs on your home network and nothing else. No account, no ads, no analytics, no crash reports."),
-        Fact(WakeIcons.Globe, "Why it asks for Internet", "That's how Android names any network access, including to the PC down the hall. Wake never contacts a server."),
+        Fact(WakeIcons.Wifi, "Only on your local network", "Wake talks to your paired PCs, plus the broadcasts that find and wake them, which other devices on the same Wi-Fi can see. No account, no ads, no analytics, no crash reports."),
+        Fact(WakeIcons.Globe, "Why it asks for Internet", "That's how Android names any network access, including to the PC down the hall. Wake never contacts anything on the internet."),
     ),
     "What's on this phone" to listOf(
         Fact(WakeIcons.Power, "Your PCs", "Names, IP addresses and network card IDs (MAC addresses), so Wake can find and wake them."),
         Fact(WakeIcons.Lock, "The pairing key", "Encrypted with a key that never leaves this phone's secure hardware (Android Keystore)."),
         Fact(WakeIcons.Fingerprint, "Your Windows password", "Only if you set up fingerprint unlock. It's locked behind your fingerprint or the phone's PIN, and opened for one unlock at a time."),
-        Fact(WakeIcons.Cross, "No phone backup", "Android backup is off for Wake, so none of this goes to Google Drive."),
+        Fact(WakeIcons.Cross, "No backup or transfer", "Android backup and phone-to-phone transfer are off for Wake, so none of this goes to Google Drive or a new phone."),
     ),
     "What's on your PC" to listOf(
         Fact(WakeIcons.Lock, "The pairing key", "Readable only by your Windows account. Your Windows password is never saved on the PC."),
-        Fact(WakeIcons.Fingerprint, "The sign-in key", "Only with sign-in after shutdown on. It's a separate key that can unlock but can't send commands, encrypted by Windows."),
+        Fact(WakeIcons.Fingerprint, "The sign-in key", "Only with sign-in after shutdown on. It's a separate key that can unlock but can't send commands, kept in a folder only your account, administrators and the sign-in program can open."),
         Fact(WakeIcons.Folder, "Logs", "What the agent did, with local addresses and results. Never your password."),
     ),
     "How it's protected" to listOf(
@@ -52,14 +53,14 @@ private val sections = listOf(
         Fact(WakeIcons.Alert, "Turn on BitLocker", "On the PC: Settings → Privacy & security → Device encryption. Then a stolen drive gives nothing away."),
     ),
     "Removing everything" to listOf(
-        Fact(WakeIcons.Cross, "Uninstall both sides", "Uninstall Wake on this phone. On the PC, run Uninstall Wake Agent.cmd: it removes the agent, its keys, logs and the sign-in option."),
+        Fact(WakeIcons.Cross, "Uninstall both sides", "Uninstall Wake on this phone. On the PC, run Uninstall Wake Agent.cmd from each Windows account that used Wake: it removes the agent, its keys and logs, and the sign-in option."),
     ),
 )
 
 @Composable
 fun PrivacyScreen(onBack: () -> Unit) {
     ScreenScaffold("Privacy & security", onBack) {
-        BodyText("Wake works only on your home network. Here's exactly what it keeps, and where.", Modifier.padding(horizontal = 4.dp))
+        BodyText("Wake works only on your local network. Here's exactly what it keeps, and where.", Modifier.padding(horizontal = 4.dp))
         sections.forEach { (title, facts) ->
             SectionLabel(title)
             KeyValueCard(inset = 0.dp) {
