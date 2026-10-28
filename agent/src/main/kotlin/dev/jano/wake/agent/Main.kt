@@ -1,5 +1,9 @@
 package dev.jano.wake.agent
 
+import dev.jano.wake.agent.signin.DpapiMachineProtector
+import dev.jano.wake.agent.signin.SignInKeyStore
+import dev.jano.wake.agent.signin.signInDataDir
+import dev.jano.wake.agent.signin.syncSignInKey
 import dev.jano.wake.agent.unlock.PipeUnlockRelay
 import dev.jano.wake.agent.unlock.WindowsPipeHost
 import dev.jano.wake.protocol.DiscoveryReply
@@ -67,6 +71,10 @@ fun main(args: Array<String>) {
 
     val roaming = File(System.getenv("APPDATA") ?: dataDir.path, "Wake").toPath()
     val store = SecretStore(roaming)
+    val signInKeys = SignInKeyStore(signInDataDir(), DpapiMachineProtector)
+    // Never stops the agent: sign-in after shutdown is optional and may not be installed.
+    fun syncSignIn() = runCatching { syncSignInKey(store.load(), signInKeys) }.onFailure { log("sign-in key not saved: ${it.message}") }
+    syncSignIn()
     val pairing = PairingMode(System::currentTimeMillis)
     val timer = Executors.newSingleThreadScheduledExecutor()
     val scheduler = CommandScheduler(WindowsPowerActions(::log), System::currentTimeMillis, timer)
@@ -75,6 +83,7 @@ fun main(args: Array<String>) {
     var listeners: Listeners? = null
     val onPaired = {
         log("paired with phone")
+        syncSignIn()
         tray.setPaired(true)
     }
 
