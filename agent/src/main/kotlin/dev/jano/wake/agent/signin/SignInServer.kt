@@ -29,8 +29,10 @@ class SignInServer(
     private val keys: () -> ByteArray?,
     private val clock: () -> Long,
     private val unlock: UnlockRelay,
+    // Pass one instance to every server the program opens: its seen-nonce list must outlive a close and
+    // reopen, or a request captured before the close could be replayed after it.
+    private val exchanges: SignedExchange = SignedExchange(keys, clock),
 ) {
-    private val exchanges = SignedExchange(keys, clock)
     private val active = AtomicInteger()
     private lateinit var server: HttpServer
     private lateinit var executor: ExecutorService

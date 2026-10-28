@@ -155,6 +155,55 @@ class SignInServerTest {
         assertFalse(server.busy())
     }
 
+    @Test
+    fun stalledRequestIsDroppedSoServerIsNotBusy() {
+        // Headers promise a body that never comes. The server must give up on it, not stay busy forever.
+        val socket = java.net.Socket("127.0.0.1", server.port)
+        socket.getOutputStream().write(
+            "POST $PATH_SIGNIN_UNLOCK HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\n".toByteArray(),
+        )
+        socket.getOutputStream().flush()
+        val busySeen = waitFor(3_000) { server.busy() }
+        val freed = waitFor(15_000) { !server.busy() }
+        socket.close()
+        assertTrue(busySeen, "the stalled request should reach the handler")
+        assertTrue(freed, "the stalled request should be dropped")
+    }
+
+    @Test
+    fun replayAfterRestartIsRejected() {
+        val shared = dev.jano.wake.agent.SignedExchange({ key }, { now })
+        val first = SignInServer(InetSocketAddress("127.0.0.1", 0), { "0A:1B:2C:3D:4E:5F" }, { key }, { now }, relay, shared).also { it.start() }
+        val body = unlockBody("n-replay").toByteArray()
+        val h = sign(key, "POST", PATH_SIGNIN_UNLOCK, body, now, "n-replay")
+        fun post(port: Int) = http.send(
+            HttpRequest.newBuilder(URI("http://127.0.0.1:$port$PATH_SIGNIN_UNLOCK"))
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                .header(H_TIMESTAMP, h.timestampMs.toString()).header(H_NONCE, h.nonce).header(H_SIGNATURE, h.signature)
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        assertEquals(200, post(first.port).statusCode())
+        first.stop()
+        val second = SignInServer(InetSocketAddress("127.0.0.1", 0), { "0A:1B:2C:3D:4E:5F" }, { key }, { now }, relay, shared).also { it.start() }
+        try {
+            val replay = post(second.port)
+            assertEquals(401, replay.statusCode())
+            assertEquals("replay", errorOf(replay).error)
+        } finally {
+            second.stop()
+        }
+    }
+
+    private fun waitFor(ms: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.nanoTime() + ms * 1_000_000
+        while (System.nanoTime() < deadline) {
+            if (condition()) return true
+            Thread.sleep(20)
+        }
+        return condition()
+    }
+
     private class FakeRelay : UnlockRelay {
         @Volatile var lockScreen: Boolean? = null
         @Volatile var block = false

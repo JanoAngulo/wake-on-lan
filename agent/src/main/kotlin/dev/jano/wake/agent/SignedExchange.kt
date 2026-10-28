@@ -13,6 +13,16 @@ import dev.jano.wake.protocol.staleProof
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 
+/**
+ * The JDK HttpServer waits forever for a slow request by default. Cap it: 5 s to receive a request, 30 s to
+ * answer (an unlock takes up to ~16 s). Must run before the first HttpServer is created, since the JDK reads
+ * these once.
+ */
+fun limitHttpServerTimes() {
+    System.setProperty("sun.net.httpserver.maxReqTime", "5")
+    System.setProperty("sun.net.httpserver.maxRspTime", "30")
+}
+
 /** Every request body the phone sends fits easily; anything bigger is refused unread. */
 const val MAX_BODY_BYTES = 4096
 
