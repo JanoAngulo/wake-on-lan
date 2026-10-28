@@ -163,6 +163,19 @@ function Stop-SignIn {
     Start-Sleep -Milliseconds 800
 }
 
+function Set-SignInAcl($dir, [string[]]$grants) {
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    foreach ($step in @(
+        # No /C: icacls must stop, and fail, at the first file it can't change.
+        @('/setowner', '*S-1-5-32-544', '/T'),
+        @('/reset', '/T'),
+        @(@('/inheritance:r', '/grant:r') + $grants)
+    )) {
+        & icacls $dir @step | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "icacls $($step[0]) failed on $dir ($LASTEXITCODE)" }
+    }
+}
+
 # Pre-login sign-in: an admin-only program, a startup task as LOCAL SERVICE with its own task SID, and grants
 # that name only that task SID. The task SID exists once the task does, so the task comes before the ACLs.
 function Install-SignIn($sourceDir) {
@@ -190,11 +203,17 @@ function Install-SignIn($sourceDir) {
 
     $taskSid = ([Security.Principal.NTAccount]$SignInAccount).Translate([Security.Principal.SecurityIdentifier]).Value
     $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    New-Item -ItemType Directory -Force $SignInKeyDir, $SignInLogDir | Out-Null
-    & icacls $SignInKeyDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "*${userSid}:(OI)(CI)M" "*${taskSid}:(OI)(CI)RX" | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "icacls failed on $SignInKeyDir ($LASTEXITCODE)" }
-    & icacls $SignInLogDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "*${taskSid}:(OI)(CI)M" "*${userSid}:(OI)(CI)RX" | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "icacls failed on $SignInLogDir ($LASTEXITCODE)" }
+    # Anyone can create folders in ProgramData, so one of these may already exist and belong to someone else.
+    # Take ownership for Administrators first, wipe whatever ACL is there, then grant exactly what's needed.
+    # If any step fails, undo the install: a half-secured folder must never receive the key.
+    try {
+        Set-SignInAcl $SignInData '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-32-545:RX'
+        Set-SignInAcl $SignInKeyDir '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', "*${userSid}:(OI)(CI)M", "*${taskSid}:(OI)(CI)RX"
+        Set-SignInAcl $SignInLogDir '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', "*${taskSid}:(OI)(CI)M", "*${userSid}:(OI)(CI)RX"
+    } catch {
+        Remove-SignIn
+        throw
+    }
 
     # The DLL serves this account's tile when the sign-in screen lists several.
     if (-not (Test-Path $WakeKey)) { New-Item $WakeKey | Out-Null }
