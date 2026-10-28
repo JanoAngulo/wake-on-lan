@@ -3,11 +3,12 @@ package dev.jano.wake.agent
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Font
-import java.awt.MenuItem
-import java.awt.PopupMenu
+import java.awt.MouseInfo
 import java.awt.RenderingHints
 import java.awt.SystemTray
 import java.awt.TrayIcon
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import java.awt.geom.Arc2D
 import java.awt.geom.Line2D
 import java.awt.image.BufferedImage
@@ -19,32 +20,45 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 
-/** System tray icon: shows pairing status and opens the pairing-code window. */
+/** System tray icon: a click opens the menu (status, pairing, log, quit). */
 class Tray(
+    hostname: String,
     private val onPair: () -> String,
     private val isPairing: () -> Boolean,
-    private val onQuit: () -> Unit,
+    onOpenLog: () -> Unit,
+    onQuit: () -> Unit,
 ) {
-    private val status = MenuItem("Not paired").apply { isEnabled = false }
+    private val menu = TrayMenu(hostname, { showPairingWindow(onPair()) }, onOpenLog, onQuit)
     private var icon: TrayIcon? = null
 
     fun show() {
         if (!SystemTray.isSupported()) return
-        val menu = PopupMenu().apply {
-            add(status)
-            addSeparator()
-            add(MenuItem("Pair phone…").apply { addActionListener { showPairingWindow(onPair()) } })
-            add(MenuItem("Quit").apply { addActionListener { onQuit() } })
+        icon = TrayIcon(powerGlyph(), "Wake agent").apply {
+            isImageAutoSize = true
+            // Left or right click opens the menu. The pointer position is in the same (scaled) coordinates
+            // as windows, which the event's own point isn't on every Windows display setup.
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseReleased(e: MouseEvent) {
+                    if (e.button == MouseEvent.BUTTON1 || e.isPopupTrigger) {
+                        menu.showAt(MouseInfo.getPointerInfo()?.location ?: e.locationOnScreen)
+                    }
+                }
+            })
         }
-        icon = TrayIcon(powerGlyph(), "Wake agent", menu).apply { isImageAutoSize = true }
         SystemTray.getSystemTray().add(icon)
     }
 
     fun setPaired(paired: Boolean) {
-        status.label = if (paired) "Paired" else "Not paired"
+        menu.paired = paired
+        icon?.toolTip = "Wake agent: ${pairingStatus(paired).lowercase()}"
+    }
+
+    fun setAddress(ip: String?) {
+        menu.address = ip
     }
 
     fun remove() {
+        menu.close()
         icon?.let { SystemTray.getSystemTray().remove(it) }
     }
 
@@ -75,7 +89,7 @@ class Tray(
     }
 
     private fun label(value: String, size: Float, style: Int, color: Color) = JLabel(value).apply {
-        font = font.deriveFont(style, size)
+        font = uiFont(style, size)
         foreground = color
         alignmentX = 0.5f
         border = BorderFactory.createEmptyBorder(6, 0, 6, 0)

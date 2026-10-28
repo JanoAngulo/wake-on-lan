@@ -93,6 +93,7 @@ fun main(args: Array<String>) {
             if (listeners != null) log("LAN adapter gone; stopping listeners")
             listeners?.stop()
             listeners = null
+            tray.setAddress(null)
             return
         }
         if (listeners?.ip == nic.ipv4) return
@@ -105,11 +106,14 @@ fun main(args: Array<String>) {
             runCatching { next.stop() }
             null
         }
+        tray.setAddress(listeners?.ip)
     }
 
     tray = Tray(
+        hostname = WindowsSystem.hostname(),
         onPair = pairing::begin,
         isPairing = { pairing.activeCode() != null },
+        onOpenLog = { runCatching { java.awt.Desktop.getDesktop().open(dataDir) }.onFailure { log("open log folder: ${it.message}") } },
         onQuit = {
             listeners?.stop()
             tray.remove()
