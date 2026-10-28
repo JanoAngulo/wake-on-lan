@@ -77,7 +77,7 @@ Have more than one PC? Tap the PC name at the top to switch, or use **Settings**
 
 - **Home network only.** The phone and PC must be on the same network.
 - **Use a network cable on the PC.** Most Wi-Fi cards can't wake a PC from shutdown.
-- **Log in after waking.** Waking works any time, but shut down, reboot, sleep and lock work once you're logged in on the PC, because the agent runs in your session.
+- **Log in after waking.** Waking works any time, but shut down, reboot, sleep and lock work once you're logged in on the PC, because the agent runs in your session. With sign-in after shutdown on, the app can sign you in first (see [Fingerprint unlock](#fingerprint-unlock-optional)).
 - **Only your phone can send commands.** Pairing uses a key exchange confirmed by the 6-digit code, and every command is signed. Other devices on your Wi-Fi can't shut your PC down.
 
 ## Fingerprint unlock (optional)
@@ -98,7 +98,7 @@ When the PC is locked (after Lock, or after waking from sleep), tap **Unlock** i
 - **Turn it on:** run **Install Wake Agent.cmd** and answer `y` to *Turn on fingerprint unlock?* It adds a "Wake" option to the lock screen. Your usual password and PIN options stay.
 - **On the phone:** Settings → your PC → **Fingerprint unlock**. Enter the Windows password once: your Microsoft account or local account password, **not the PIN**.
 - **Where the password lives:** only on the phone, locked by your fingerprint (the phone's PIN works as backup). It's sent to the PC encrypted and never saved there.
-- **Not after a restart.** It unlocks a locked session. After a shutdown or reboot, sign in on the PC as usual.
+- **After a shutdown too (optional):** answer `y` to *Allow fingerprint sign-in after shutdown?* in the installer. Then after you wake the PC from shutdown, the app shows **On, at sign-in** and Unlock signs you in at the Windows sign-in screen. Without it, sign in on the PC as usual after a shutdown or reboot.
 - If the PC rejects the saved password (you changed it), Wake deletes it and asks again. It never retries on its own, so it can't lock your account.
 
 It needs two Windows settings:
@@ -106,7 +106,9 @@ It needs two Windows settings:
 - **"Only allow Windows Hello sign-in for Microsoft accounts" must be off** (Settings → Accounts → Sign-in options). When it's on, Windows hides every sign-in option except Windows Hello, Wake included. `setup.ps1 -Check` tells you if it's on.
 - **Your Microsoft account needs a password.** A passwordless account has no password to send, so turn passwordless off at account.microsoft.com → Security.
 
-After a reboot you'll also see the Wake option on the sign-in screen. It's never picked by default and does nothing there, so sign in as usual.
+After a reboot you'll also see the Wake option on the sign-in screen. It's never picked by default. Without sign-in after shutdown it does nothing there, so sign in as usual.
+
+**How sign-in after shutdown stays safe.** A small program, `WakeSignIn.exe`, starts at boot as the built-in LOCAL SERVICE account with its own identity and no admin rights. It listens on port 47615, from your home network only, and only while the sign-in or lock screen is up. It accepts just two requests from your paired phone and can't shut down, pair or do anything else. It holds a separate key derived from the pairing secret, not the secret itself. Your password still lives only on the phone. Turn on **BitLocker** (Settings → Privacy & security → Device encryption) so a stolen drive gives nothing away; `setup.ps1 -Check` shows whether it's on.
 
 To remove it, run **Uninstall Wake Agent.cmd**. If Windows is still using the file, it's deleted on the next restart.
 
@@ -120,6 +122,7 @@ To remove it, run **Uninstall Wake Agent.cmd**. If Windows is still using the fi
 | Pairing fails | Start pairing again from the tray icon; the code lasts 2 minutes and works once. |
 | No **Unlock** button, or "Install the unlock module on the PC first" | Run **Install Wake Agent.cmd** again and answer `y` to *Turn on fingerprint unlock?* |
 | No Wake option on the lock screen | Turn off "only allow Windows Hello sign-in" (see [Fingerprint unlock](#fingerprint-unlock-optional)). |
+| No **Unlock** after waking from shutdown ("On, waiting for agent") | Run `setup.ps1 -Check` and look at the *Sign-in after shutdown* rows; if it isn't installed, run **Install Wake Agent.cmd** again and answer `y`. Its log is `C:\ProgramData\Wake\logs\signin.log`. If the PC got a new IP address, give it a fixed one (a DHCP reservation) on your router. |
 | "Couldn't save" when saving the password | Set up a screen lock and at least one fingerprint on the phone first. |
 
 The agent's log is at `%LOCALAPPDATA%\Wake\agent.log`.
@@ -135,13 +138,15 @@ Phone ──UDP broadcast, magic packet─────────▶ PC network
 Phone ──UDP broadcast, discovery────────────▶ agent             (find PC: name, IP, MAC)
 Phone ──HTTP, HMAC-signed requests──────────▶ agent             (status, shutdown, reboot, sleep, lock)
 Phone ──HTTP, signed + encrypted /unlock────▶ agent ──named pipe──▶ credential provider DLL ──▶ lock screen
+Phone ──HTTP, /signin/* (sign-in key)───────▶ WakeSignIn ──named pipe──▶ credential provider DLL ──▶ sign-in screen
 ```
 
 - **Pairing:** an X25519 key exchange confirmed by the 6-digit code. The phone proves the code first; the agent's proof comes back only afterwards, so the traffic gives nothing away for offline guessing.
 - **Commands:** HMAC-SHA256 over the method, path, timestamp, a one-time nonce and the body. The agent rejects bad signatures, requests more than 30 seconds old and reused nonces. Clock corrections are accepted only with an HMAC proof from the agent.
 - **Shutdown and reboot** run 3 seconds after the request, which is what makes Undo possible. **Sleep** never hibernates. **Lock** needs the agent running in the logged-in session.
 - **Unlock:** the phone's Android Keystore releases the password only after a fingerprint (or the phone's PIN). The password is AES-GCM encrypted with a key derived from the pairing secret through HKDF, and the ciphertext is bound to the request's nonce. The agent decrypts it and passes it over `\\.\pipe\wake-unlock` to `WakeCredentialProvider.dll`, a Windows credential provider that LogonUI loads as SYSTEM. It submits the password and reports Windows' answer back. The agent only writes to the pipe if SYSTEM owns it. The DLL does no networking, stores nothing on disk and sits in `C:\Program Files\Wake`, where only administrators can write.
-- **Ports:** UDP 9 (Wake-on-LAN), TCP 47613 (agent API), UDP 47614 (discovery). TCP 135 is only used to check that the PC is up.
+- **Sign-in after shutdown:** `WakeSignIn.exe` (same Kotlin module, second launcher) runs from the startup task "Wake Sign-in" as LOCAL SERVICE with `ProcessTokenSidType Unrestricted` (its own `NT TASK\Wake Sign-in` SID) and only SeChangeNotifyPrivilege. It binds TCP 47615 only while the pipe exists and serves `/signin/status` and `/signin/unlock`, signed and sealed with `HKDF(secret, "wake-signin-v1")`, never the pairing secret. Bodies over 4 KiB get 413. The tray agent writes that key to `C:\ProgramData\Wake\signin` with DPAPI machine scope; the folder grants only SYSTEM, Administrators, the installing user and the task SID. The DLL adds the task SID to its pipe DACL and picks the installing user's tile (`HKLM\SOFTWARE\Wake\SignInUserSid`). Design: [docs/specs/2026-10-28-cold-boot-sign-in-design.md](docs/specs/2026-10-28-cold-boot-sign-in-design.md).
+- **Ports:** UDP 9 (Wake-on-LAN), TCP 47613 (agent API), UDP 47614 (discovery), TCP 47615 (sign-in, only while the sign-in or lock screen is up). TCP 135 is only used to check that the PC is up.
 
 ### Building
 
