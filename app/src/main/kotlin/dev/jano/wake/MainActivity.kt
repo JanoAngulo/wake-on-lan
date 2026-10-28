@@ -1,7 +1,9 @@
 package dev.jano.wake
 
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
@@ -20,7 +22,12 @@ import kotlinx.coroutines.launch
 // FragmentActivity (still a ComponentActivity) because BiometricPrompt hosts its dialog in a fragment.
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // The app is dark-only, so the status and navigation bar icons must be light even when the phone is in
+        // light mode; the default (auto) would draw dark icons on the dark background.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         if (BuildConfig.DEBUG && intent.getStringExtra("debugAction") == "discover") runNetworkCheck()
         val demo = if (BuildConfig.DEBUG) intent.getStringExtra("demoState") else null
