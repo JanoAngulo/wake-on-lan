@@ -42,8 +42,8 @@ That's it. The same steps are in the app under **Settings → How to connect**.
 
 <table>
   <tr>
-    <td align="center" width="25%"><img src="docs/screenshots/off.png" alt="PC is off. The big power button says Tap to wake, and Response shows Off since 23:02." width="200"></td>
-    <td align="center" width="25%"><img src="docs/screenshots/waking.png" alt="Waking up, 18 seconds in. A ring spins around the power button and Response shows Waiting." width="200"></td>
+    <td align="center" width="25%"><img src="docs/screenshots/off.png" alt="PC is off. The big power button says Tap to wake, and Response shows Off since 15:24." width="200"></td>
+    <td align="center" width="25%"><img src="docs/screenshots/waking.png" alt="Waking up, 20 seconds in. A ring spins around the power button and Response shows Waiting." width="200"></td>
     <td align="center" width="25%"><img src="docs/screenshots/on.png" alt="PC is on for 2 hours 14 minutes. The button turns into a green ring and Sleep, Lock, Reboot and Shut down are enabled." width="200"></td>
     <td align="center" width="25%"><img src="docs/screenshots/undo.png" alt="After sliding Shut down, a bar at the bottom says Shutting down in 3s with an Undo button." width="200"></td>
   </tr>
