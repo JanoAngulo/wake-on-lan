@@ -160,6 +160,8 @@ Phone ──HTTP, /signin/* (sign-in key)───────▶ WakeSignIn ─
 
 Requirements: JDK 21 and the Android SDK (platform 36). Gradle is included through the wrapper.
 
+Use the latest JDK 21 update for releases: the Java runtime bundled with the Windows agent, which also runs the sign-in program before anyone signs in, is copied from the JDK that runs Gradle (`JAVA_HOME`).
+
 ```bash
 ./gradlew test                    # unit tests for every module
 ./gradlew :app:assembleRelease    # app/build/outputs/apk/release/app-release.apk
