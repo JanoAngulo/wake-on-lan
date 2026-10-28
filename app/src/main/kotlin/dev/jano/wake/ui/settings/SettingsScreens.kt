@@ -210,17 +210,3 @@ fun AdvancedScreen(store: Store, onPollMs: (Long) -> Unit, onHaptics: (Boolean) 
         }
     }
 }
-
-@Composable
-fun PcSetupHelpScreen(onBack: () -> Unit) {
-    ScreenScaffold("PC setup help", onBack) {
-        SectionLabel("If the PC won't wake")
-        BodyText("1. Make sure the PC is plugged in and its network cable is connected.")
-        BodyText("2. On the PC, open PowerShell in the Wake project folder and run: pc-setup\\setup.ps1 -Check. Every line should say yes.")
-        BodyText("3. In the BIOS (press Delete at startup), enable Resume by PCI-E device (LAN) and disable ErP Ready.")
-        BodyText("4. Keep Windows Fast Startup off so Shut down is a real shutdown.")
-        SectionLabel("If commands don't work")
-        BodyText("The Wake agent runs when you log in on the PC. Look for the green power icon in the system tray. If it's missing, log in, or run the setup script again.")
-        BodyText("If you reinstalled the app or the agent, pair again from Settings → Devices.")
-    }
-}
