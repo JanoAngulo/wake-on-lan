@@ -4,6 +4,7 @@
 #include <propkey.h>
 
 #include "Credential.h"
+#include "SignInConfig.h"
 
 // Keep the DLL loaded while a provider lives (defined in Dll.cpp).
 void WakeDllAddRef();
@@ -121,7 +122,7 @@ HRESULT Provider::StartPipeIfReady() {
         if (credential_) credential_->AttachPipe(&pipe_);
     }
     // Start outside the lock: the pipe thread calls back into OnUnlockRequest, which takes it.
-    HRESULT hr = pipe_.Start(this, sid);
+    HRESULT hr = pipe_.Start(this, sid, LookupServiceSid());
     Trace(L"pipe start hr=0x%08X", static_cast<unsigned>(hr));
     if (FAILED(hr)) {
         StopPipe();
@@ -234,8 +235,24 @@ IFACEMETHODIMP Provider::SetUserArray(ICredentialProviderUserArray* users) {
         bool isLocal = true;
         DWORD count = 0;
         if (SUCCEEDED(users->GetCount(&count)) && count > 0) {
+            // Serve the account that installed Wake when LogonUI lists several; otherwise the first.
+            std::vector<std::wstring> sids;
+            for (DWORD i = 0; i < count; ++i) {
+                std::wstring each;
+                ICredentialProviderUser* candidate = nullptr;
+                if (SUCCEEDED(users->GetAt(i, &candidate)) && candidate) {
+                    LPWSTR raw = nullptr;
+                    if (SUCCEEDED(candidate->GetSid(&raw)) && raw) {
+                        each = raw;
+                        CoTaskMemFree(raw);
+                    }
+                    candidate->Release();
+                }
+                sids.push_back(each);
+            }
+            const DWORD index = static_cast<DWORD>(PickUser(sids, ReadPreferredUserSid()));
             ICredentialProviderUser* user = nullptr;
-            if (SUCCEEDED(users->GetAt(0, &user)) && user) {
+            if (SUCCEEDED(users->GetAt(index, &user)) && user) {
                 LPWSTR raw = nullptr;
                 if (SUCCEEDED(user->GetStringValue(PKEY_Identity_QualifiedUserName, &raw)) && raw) {
                     name = raw;
