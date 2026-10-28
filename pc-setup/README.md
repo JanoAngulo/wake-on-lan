@@ -23,7 +23,9 @@ The script:
 - installs the agent to `%LOCALAPPDATA%\Wake` and starts it at every logon;
 - asks `Turn on fingerprint unlock? (y/N)`. Yes copies `WakeCredentialProvider.dll` (pass it with `-UnlockDll`) to `C:\Program Files\Wake` and registers it as an extra lock-screen option. `-Unlock` or `-NoUnlock` answers for you; `-NoUnlock` also removes it if installed.
 
-`-Check` also reports whether *only allow Windows Hello sign-in for Microsoft accounts* is on, since it can hide password-based lock-screen options. Recovery steps if the lock screen misbehaves are in [docs/RUNBOOK.md](../docs/RUNBOOK.md#fingerprint-unlock-recovery).
+- with fingerprint unlock on and the release download, asks `Allow fingerprint sign-in after shutdown? (y/N)`. Yes copies `WakeSignIn.exe` to `C:\Program Files\Wake\SignIn` and adds the startup task "Wake Sign-in". The task runs it before anyone signs in, as LOCAL SERVICE with its own task SID and no extra privileges. It listens on 47615 TCP, from your home network only, and only while the sign-in or lock screen is up. `-SignIn` or `-NoSignIn` answers for you; `-NoSignIn` also removes it.
+
+`-Check` also reports whether BitLocker protects C: (turn it on if it's off; it's what protects Wake's keys on a stolen drive), and whether *only allow Windows Hello sign-in for Microsoft accounts* is on, since it can hide password-based lock-screen options. Recovery steps if the lock screen misbehaves are in [docs/RUNBOOK.md](../docs/RUNBOOK.md#fingerprint-unlock-recovery).
 
 It only changes what isn't already right, so running it again is safe. If it does change an adapter setting, the network drops for a few seconds.
 
@@ -43,5 +45,6 @@ Right-click the Wake icon in the system tray, choose **Pair phone…**, and type
 - Agent: `%LOCALAPPDATA%\Wake\wake-agent.jar`
 - Log: `%LOCALAPPDATA%\Wake\agent.log`
 - Pairing secret: `%APPDATA%\Wake\secret.bin` (readable only by your Windows account)
+- Sign-in after shutdown: program in `C:\Program Files\Wake\SignIn`; its key (derived from the pairing secret, DPAPI-encrypted) in `C:\ProgramData\Wake\signin`; its log at `C:\ProgramData\Wake\logs\signin.log`
 
-To remove everything: delete the scheduled task "Wake Agent", the two "Wake Agent" firewall rules, and the two folders above.
+To remove everything, run `setup.ps1 -Uninstall` as administrator.

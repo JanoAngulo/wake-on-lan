@@ -19,6 +19,12 @@
       6. Optional fingerprint unlock module: WakeCredentialProvider.dll in C:\Program Files\Wake (admin-only,
          because LogonUI loads it as SYSTEM), registered as an extra lock-screen tile. Asked about on install;
          -Unlock / -NoUnlock answer for you. -UnlockDll points at the DLL.
+      7. Optional fingerprint sign-in after shutdown (needs item 6 and the release download): WakeSignIn.exe in
+         C:\Program Files\Wake\SignIn, started at boot by the "Wake Sign-in" task as LOCAL SERVICE with its own
+         task SID and one privilege. It listens on 47615/TCP, local subnet only, while the sign-in or lock screen
+         is up. Asked about on install; -SignIn / -NoSignIn answer for you.
+
+    -Check also reports, without changing it, whether BitLocker protects C:.
 
     Green Ethernet and Power Saving Mode are only reported: changing adapter settings resets the
     network link, and Wake-on-LAN usually works with them on.
@@ -36,7 +42,9 @@ param(
     [string]$AgentJar = "$PSScriptRoot\..\agent\build\libs\wake-agent.jar",
     [switch]$Unlock,
     [switch]$NoUnlock,
-    [string]$UnlockDll
+    [string]$UnlockDll,
+    [switch]$SignIn,
+    [switch]$NoSignIn
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +63,16 @@ $UnlockTarget = Join-Path $env:ProgramFiles 'Wake\WakeCredentialProvider.dll'
 $UnlockComKey = "HKLM:\SOFTWARE\Classes\CLSID\$UnlockClsid"
 $UnlockProviderKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\$UnlockClsid"
 $PasswordLessKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device'
+$SignInTask = 'Wake Sign-in'
+$SignInAccount = "NT TASK\$SignInTask"
+$SignInDir = Join-Path $env:ProgramFiles 'Wake\SignIn'
+$SignInExe = Join-Path $SignInDir 'WakeSignIn.exe'
+$SignInData = Join-Path $env:ProgramData 'Wake'
+$SignInKeyDir = Join-Path $SignInData 'signin'
+$SignInLogDir = Join-Path $SignInData 'logs'
+$SignInPort = 47615
+$SignInRule = 'Wake Sign-in'
+$WakeKey = 'HKLM:\SOFTWARE\Wake'
 
 function Test-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -136,6 +154,68 @@ public static extern bool MoveFileEx(string existing, string replacement, int fl
     }
 }
 
+function Test-SignIn { [bool](Get-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $SignInExe) }
+
+function Stop-SignIn {
+    Stop-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue
+    Get-Process WakeSignIn -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 800
+}
+
+# Pre-login sign-in: an admin-only program, a startup task as LOCAL SERVICE with its own task SID, and grants
+# that name only that task SID. The task SID exists once the task does, so the task comes before the ACLs.
+function Install-SignIn($sourceDir) {
+    $sameBuild = (Test-Path -LiteralPath $SignInExe) -and ((Get-FileHash (Join-Path $sourceDir 'app\wake-agent.jar')).Hash -eq
+        (Get-FileHash (Join-Path $SignInDir 'app\wake-agent.jar') -ErrorAction SilentlyContinue).Hash)
+    Stop-SignIn
+    if (-not $sameBuild) {
+        Remove-Item -LiteralPath $SignInDir -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force (Split-Path $SignInDir) | Out-Null
+        Copy-Item $sourceDir $SignInDir -Recurse -Force
+    }
+
+    # At startup, plus every 5 minutes so a crash is back soon; IgnoreNew skips the repeat while it runs.
+    $action = New-ScheduledTaskAction -Execute $SignInExe
+    $triggers = @(
+        (New-ScheduledTaskTrigger -AtStartup),
+        (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5))
+    )
+    $principal = New-ScheduledTaskPrincipal -UserId 'NT AUTHORITY\LOCAL SERVICE' -LogonType ServiceAccount `
+        -ProcessTokenSidType Unrestricted -RequiredPrivilege 'SeChangeNotifyPrivilege'
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable
+    Register-ScheduledTask -TaskName $SignInTask -Action $action -Trigger $triggers -Principal $principal -Settings $settings `
+        -Description 'Lets your paired phone sign you in at the Windows sign-in screen.' -Force | Out-Null
+
+    $taskSid = ([Security.Principal.NTAccount]$SignInAccount).Translate([Security.Principal.SecurityIdentifier]).Value
+    $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    New-Item -ItemType Directory -Force $SignInKeyDir, $SignInLogDir | Out-Null
+    & icacls $SignInKeyDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "*${userSid}:(OI)(CI)M" "*${taskSid}:(OI)(CI)RX" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls failed on $SignInKeyDir ($LASTEXITCODE)" }
+    & icacls $SignInLogDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "*${taskSid}:(OI)(CI)M" "*${userSid}:(OI)(CI)RX" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls failed on $SignInLogDir ($LASTEXITCODE)" }
+
+    # The DLL serves this account's tile when the sign-in screen lists several.
+    if (-not (Test-Path $WakeKey)) { New-Item $WakeKey | Out-Null }
+    Set-ItemProperty $WakeKey 'SignInUserSid' $userSid -Type String
+
+    $rule = Get-NetFirewallRule -DisplayName $SignInRule -ErrorAction SilentlyContinue
+    if (-not $rule -or ($rule | Get-NetFirewallApplicationFilter).Program -ne $SignInExe) {
+        if ($rule) { $rule | Remove-NetFirewallRule }
+        New-NetFirewallRule -DisplayName $SignInRule -Direction Inbound -Action Allow -Protocol TCP -LocalPort $SignInPort `
+            -RemoteAddress LocalSubnet -Profile Private, Public -Program $SignInExe | Out-Null
+    }
+    Start-ScheduledTask -TaskName $SignInTask
+}
+
+function Remove-SignIn {
+    Stop-SignIn
+    Unregister-ScheduledTask -TaskName $SignInTask -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-NetFirewallRule -DisplayName $SignInRule -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $SignInDir, $SignInData -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path $WakeKey) { Remove-Item $WakeKey -Recurse -Force }
+}
+
 # Exact keyword match: '*' in keywords like '*EEE' would otherwise act as a wildcard.
 function Get-AdapterProperty($adapterName, $keyword) {
     Get-NetAdapterAdvancedProperty -Name $adapterName -ErrorAction SilentlyContinue |
@@ -156,8 +236,9 @@ if ($Uninstall) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $RuleNames | ForEach-Object { Remove-NetFirewallRule -DisplayName $_ -ErrorAction SilentlyContinue }
     Remove-Item $InstallDir, $SecretDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-SignIn  # before the unlock module, which removes C:\Program Files\Wake only when it's empty
     Remove-UnlockModule
-    Write-Output 'Wake agent removed: logon task, firewall rules, files, pairing and the fingerprint unlock module.'
+    Write-Output 'Wake agent removed: logon task, firewall rules, files, pairing, sign-in after shutdown and the fingerprint unlock module.'
     Write-Output 'Network adapter and Fast Startup settings were left as they are.'
     return
 }
@@ -277,12 +358,57 @@ if (-not $Check) {
     } elseif ($wantUnlock) {
         $note = 'WakeCredentialProvider.dll not found; build it with credential-provider\build.cmd'
     } elseif ($NoUnlock -and $unlockInstalled) {
+        Remove-SignIn  # sign-in needs the module; and the module's folder goes only when empty
         Remove-UnlockModule
     }
 }
 $nowInstalled = Test-UnlockModule
 Add-Result 'Fingerprint unlock module' $(if ($nowInstalled) { 'installed' } else { 'not installed' }) `
     $(if ($wantUnlock) { 'installed' } else { 'optional' }) ($nowInstalled -or -not $wantUnlock) $note
+
+# 7. Fingerprint sign-in after shutdown (opt-in). Needs the unlock module and the release download's WakeSignIn.exe.
+$signInInstalled = Test-SignIn
+$wantSignIn = $SignIn -or ($signInInstalled -and -not $NoSignIn)
+$note = ''
+if (-not $Check) {
+    if (-not $nowInstalled) {
+        if ($signInInstalled) { Remove-SignIn }
+        if ($SignIn) { $note = 'needs fingerprint unlock (item 6)' }
+        $wantSignIn = $false
+    } elseif (-not $bundled -or -not (Test-Path (Join-Path $sourceDir 'WakeSignIn.exe'))) {
+        if ($wantSignIn) { $note = 'needs the release download and the unlock module' }
+    } else {
+        if (-not $SignIn -and -not $NoSignIn -and -not $signInInstalled) {
+            $wantSignIn = (Read-Host 'Allow fingerprint sign-in after shutdown? (y/N)') -match '^\s*y'
+        }
+        if ($wantSignIn) {
+            try { Install-SignIn $sourceDir } catch { $note = "couldn't install: $($_.Exception.Message)" }
+        } elseif ($NoSignIn -and $signInInstalled) {
+            Remove-SignIn
+        }
+    }
+}
+$signInNow = Test-SignIn
+Add-Result 'Sign-in after shutdown' $(if ($signInNow) { 'installed' } else { 'not installed' }) `
+    $(if ($wantSignIn) { 'installed' } else { 'optional' }) ($signInNow -or -not $wantSignIn) $note
+if ($signInNow) {
+    $task = Get-ScheduledTask -TaskName $SignInTask
+    $principalOk = $task.Principal.UserId -match 'LOCAL ?SERVICE' -and "$($task.Principal.ProcessTokenSidType)" -eq 'Unrestricted'
+    Add-Result "Task '$SignInTask'" "$($task.State), $($task.Principal.UserId)" 'LOCAL SERVICE with its task SID' ($principalOk -and $task.State -ne 'Disabled')
+    $rule = Get-NetFirewallRule -DisplayName $SignInRule -ErrorAction SilentlyContinue
+    $ruleProgram = if ($rule) { ($rule | Get-NetFirewallApplicationFilter).Program } else { $null }
+    Add-Result "Firewall: $SignInRule" $(if ($rule) { 'present' } else { 'missing' }) "allow TCP $SignInPort from LocalSubnet" ($ruleProgram -eq $SignInExe)
+    $keyThere = Test-Path -LiteralPath (Join-Path $SignInKeyDir 'signin.key')
+    Add-Result 'Sign-in key' $(if ($keyThere) { 'present' } else { 'missing' }) 'present once paired' $true `
+        $(if ($keyThere) { '' } else { 'written by the agent once a phone is paired' })
+    $savedSid = (Get-ItemProperty $WakeKey -Name SignInUserSid -ErrorAction SilentlyContinue).SignInUserSid
+    $mySid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    Add-Result 'Sign-in account' $(if ($savedSid -eq $mySid) { 'this account' } elseif ($savedSid) { 'another account' } else { 'not set' }) 'this account' ($savedSid -eq $mySid)
+}
+
+# Reported only: BitLocker is what protects the sign-in key and pairing secret on a stolen drive.
+$bitLocker = try { "$((Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop).ProtectionStatus)" } catch { 'unknown (needs admin)' }
+Add-Result "BitLocker on $env:SystemDrive" $bitLocker 'On (recommended)' $true $(if ($bitLocker -eq 'Off') { 'report only: turn it on in Settings > Privacy & security > Device encryption' } else { '' })
 
 # Reported only: "only allow Windows Hello sign-in for Microsoft accounts" can hide password-based tiles.
 $helloOnly = (Get-ItemProperty $PasswordLessKey -Name DevicePasswordLessBuildVersion -ErrorAction SilentlyContinue).DevicePasswordLessBuildVersion -eq 2
