@@ -4,6 +4,8 @@
 
 #include <optional>
 
+#include "SignInConfig.h"
+
 namespace wake {
 
 // NTSTATUS values we invent when Windows never got to answer.
@@ -27,7 +29,8 @@ bool PipeServer::Stopping() const {
     return WaitForSingleObject(stopEvent_, 0) == WAIT_OBJECT_0;
 }
 
-HRESULT PipeServer::Start(IUnlockSink* sink, const std::wstring& lockedUserSid) {
+HRESULT PipeServer::Start(IUnlockSink* sink, const std::wstring& lockedUserSid,
+                          const std::optional<std::wstring>& serviceSid) {
     Stop();
     if (!sink || lockedUserSid.empty()) return E_INVALIDARG;
     sink_ = sink;
@@ -44,9 +47,9 @@ HRESULT PipeServer::Start(IUnlockSink* sink, const std::wstring& lockedUserSid) 
         return hr;
     }
 
-    // Owner SYSTEM; DACL: SYSTEM full control, the locked user read+write. No one else can open it.
-    std::wstring sddl = options_.systemOwner ? L"O:SY" : L"";
-    sddl += L"D:(A;;GA;;;SY)(A;;GRGW;;;" + lockedUserSid + L")";
+    // Owner SYSTEM; DACL: SYSTEM full control, the locked user and the sign-in program read+write. No one
+    // else can open it.
+    const std::wstring sddl = BuildPipeSddl(options_.systemOwner, lockedUserSid, serviceSid);
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = FALSE;

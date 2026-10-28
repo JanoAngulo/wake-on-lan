@@ -12,7 +12,7 @@ add_library(pipe_protocol STATIC src/PipeProtocol.cpp)
 target_include_directories(pipe_protocol PUBLIC src)
 
 # The parts with no COM or LogonUI state: the pipe server and the unlock-logon packing.
-add_library(provider_core STATIC src/PipeServer.cpp src/UnlockLogon.cpp)
+add_library(provider_core STATIC src/PipeServer.cpp src/UnlockLogon.cpp src/SignInConfig.cpp)
 target_link_libraries(provider_core PUBLIC pipe_protocol advapi32 ole32)
 
 # The credential provider DLL: COM in-process server loaded by LogonUI as SYSTEM.
@@ -52,6 +52,14 @@ foreach(name replies_reported_result stop_after_submit_replies_provider_closed
     add_test(NAME ${name} COMMAND pipe_server_test ${name})
     # A shutdown bug shows up as a hang; fail it instead of stalling the build.
     set_tests_properties(${name} PROPERTIES TIMEOUT 20)
+endforeach()
+
+add_executable(sign_in_config_test tests/sign_in_config_test.cpp)
+target_link_libraries(sign_in_config_test PRIVATE provider_core)
+foreach(name picks_preferred_user picks_preferred_case_insensitive falls_back_to_first_when_absent
+             falls_back_to_first_when_not_listed sddl_without_service sddl_with_service
+             sddl_drops_invalid_service_sid sddl_without_system_owner rejects_non_sid_strings)
+    add_test(NAME ${name} COMMAND sign_in_config_test ${name})
 endforeach()
 
 add_executable(tile_bitmap_test tests/tile_bitmap_test.cpp)

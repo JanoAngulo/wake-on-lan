@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 
@@ -49,8 +50,10 @@ class PipeServer {
     PipeServer(const PipeServer&) = delete;
     PipeServer& operator=(const PipeServer&) = delete;
 
-    // Create the pipe and start the thread. sink outlives the server. Calls Stop() first.
-    HRESULT Start(IUnlockSink* sink, const std::wstring& lockedUserSid);
+    // Create the pipe and start the thread. sink outlives the server. Calls Stop() first. serviceSid, when
+    // set, is the pre-login sign-in program's SID and may also open the pipe.
+    HRESULT Start(IUnlockSink* sink, const std::wstring& lockedUserSid,
+                  const std::optional<std::wstring>& serviceSid = std::nullopt);
     // Signal the thread to stop and join it. Safe to call when not started. Bounded: every pipe
     // wait is interrupted at once, except the 8-byte "provider closed" write (capped at 1 s).
     void Stop();
