@@ -4,6 +4,7 @@ import dev.jano.wake.data.DeviceRepository
 import dev.jano.wake.data.InMemoryPreferences
 import dev.jano.wake.data.Secrets
 import dev.jano.wake.main.AgentApiFactory
+import dev.jano.wake.main.SignInApiFactory
 import dev.jano.wake.main.AppGraph
 import dev.jano.wake.main.Discoverer
 import dev.jano.wake.main.HostProber
@@ -47,6 +48,7 @@ class SetupViewModelTest {
         },
         prober = HostProber { _, _ -> ProbeResult.Down },
         agents = AgentApiFactory { _, _ -> error("unused") },
+        signIns = SignInApiFactory { _, _ -> error("unused") },
         discoverer = Discoverer { listOf(reply) },
         phoneNet = PhoneNetReader { PhoneNet(true, "192.168.1.23", 24) },
         waker = Waker { _, _, _ -> },
