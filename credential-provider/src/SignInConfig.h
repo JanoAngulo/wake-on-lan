@@ -15,6 +15,10 @@ inline constexpr wchar_t kSignInAccount[] = L"NT TASK\\Wake Sign-in";
 // Index of the user whose SID matches preferred (case-insensitive); 0 when there's no match.
 size_t PickUser(const std::vector<std::wstring>& sids, const std::optional<std::wstring>& preferred);
 
+// The sign-in program may reach the pipe only when the tile serves the account that installed Wake, so the
+// installing user's password is never submitted for anyone else.
+bool SignInAllowedFor(const std::wstring& tileUserSid, const std::optional<std::wstring>& installingUserSid);
+
 // "S-1-" followed by digits and dashes only, at most 184 characters. Guards what goes into an SDDL string.
 bool LooksLikeSid(const std::wstring& s);
 

@@ -122,7 +122,8 @@ HRESULT Provider::StartPipeIfReady() {
         if (credential_) credential_->AttachPipe(&pipe_);
     }
     // Start outside the lock: the pipe thread calls back into OnUnlockRequest, which takes it.
-    HRESULT hr = pipe_.Start(this, sid, LookupServiceSid());
+    const auto serviceSid = SignInAllowedFor(sid, ReadPreferredUserSid()) ? LookupServiceSid() : std::nullopt;
+    HRESULT hr = pipe_.Start(this, sid, serviceSid);
     Trace(L"pipe start hr=0x%08X", static_cast<unsigned>(hr));
     if (FAILED(hr)) {
         StopPipe();
