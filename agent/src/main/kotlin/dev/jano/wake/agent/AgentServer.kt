@@ -6,25 +6,18 @@ import dev.jano.wake.protocol.CancelRequest
 import dev.jano.wake.protocol.CancelResponse
 import dev.jano.wake.protocol.CommandRequest
 import dev.jano.wake.protocol.CommandResponse
-import dev.jano.wake.protocol.ErrorBody
 import dev.jano.wake.protocol.H_NONCE
-import dev.jano.wake.protocol.H_SIGNATURE
-import dev.jano.wake.protocol.H_TIMESTAMP
 import dev.jano.wake.protocol.PairConfirmed
 import dev.jano.wake.protocol.PairOffer
 import dev.jano.wake.protocol.PairFinish
 import dev.jano.wake.protocol.PairStart
-import dev.jano.wake.protocol.RequestVerifier
-import dev.jano.wake.protocol.SignedHeaders
 import dev.jano.wake.protocol.StatusResponse
-import dev.jano.wake.protocol.VerifyResult
 import dev.jano.wake.protocol.WakeJson
 import dev.jano.wake.protocol.confirmTag
 import dev.jano.wake.protocol.decodePublic
 import dev.jano.wake.protocol.deriveSecret
 import dev.jano.wake.protocol.encodePublic
 import dev.jano.wake.protocol.generateX25519
-import dev.jano.wake.protocol.staleProof
 import dev.jano.wake.protocol.transcript
 import dev.jano.wake.protocol.UnlockRequest
 import dev.jano.wake.protocol.UnlockResponse
@@ -50,7 +43,7 @@ class AgentServer(
 ) {
     private class PairSession(val code: String, val phonePub: String, val agentKeys: KeyPair, val transcript: ByteArray)
 
-    private val verifier = RequestVerifier(secret = store::load, clock = clock)
+    private val exchanges = SignedExchange(store::load, clock)
     private var session: PairSession? = null
     private lateinit var server: HttpServer
     private lateinit var executor: ExecutorService
@@ -72,7 +65,7 @@ class AgentServer(
     }
 
     private fun route(exchange: HttpExchange) {
-        val body = exchange.requestBody.readAllBytes()
+        val body = readCapped(exchange) ?: return error(exchange, 413, "too_large")
         val method = exchange.requestMethod.uppercase()
         when (method to exchange.requestURI.path) {
             "GET" to "/status" -> signed(exchange, body) { status() to StatusResponse.serializer() }
@@ -113,31 +106,8 @@ class AgentServer(
         )
     }
 
-    private fun <T> signed(exchange: HttpExchange, body: ByteArray, handler: () -> Pair<T, KSerializer<T>>) {
-        val h = exchange.requestHeaders
-        val timestamp = h.getFirst(H_TIMESTAMP)?.toLongOrNull()
-        val nonce = h.getFirst(H_NONCE)
-        val signature = h.getFirst(H_SIGNATURE)
-        val result = if (timestamp == null || nonce == null || signature == null) {
-            if (store.load() == null) VerifyResult.NOT_PAIRED else VerifyResult.BAD_SIGNATURE
-        } else {
-            verifier.verify(exchange.requestMethod, exchange.requestURI.path, body, SignedHeaders(timestamp, nonce, signature))
-        }
-        if (result == VerifyResult.STALE) {
-            // Signature already checked, so this request really came from the paired phone.
-            val now = clock()
-            val body = ErrorBody("stale", now, staleProof(store.load()!!, nonce!!, now))
-            return json(exchange, 401, WakeJson.encodeToString(ErrorBody.serializer(), body))
-        }
-        if (result != VerifyResult.OK) return error(exchange, 401, result.name.lowercase())
-
-        val (value, serializer) = try {
-            handler()
-        } catch (e: kotlinx.serialization.SerializationException) {
-            return error(exchange, 400, "bad_request")
-        }
-        json(exchange, 200, WakeJson.encodeToString(serializer, value))
-    }
+    private fun <T> signed(exchange: HttpExchange, body: ByteArray, handler: () -> Pair<T, KSerializer<T>>) =
+        exchanges.handle(exchange, body, handler)
 
     @Synchronized
     private fun pairStart(exchange: HttpExchange, body: ByteArray) {
@@ -177,13 +147,7 @@ class AgentServer(
         json(exchange, 200, WakeJson.encodeToString(PairConfirmed.serializer(), confirmed))
     }
 
-    private fun error(exchange: HttpExchange, status: Int, code: String) =
-        json(exchange, status, WakeJson.encodeToString(ErrorBody.serializer(), ErrorBody(code, clock())))
+    private fun error(exchange: HttpExchange, status: Int, code: String) = exchanges.error(exchange, status, code)
 
-    private fun json(exchange: HttpExchange, status: Int, text: String) {
-        val bytes = text.toByteArray()
-        exchange.responseHeaders.add("Content-Type", "application/json")
-        exchange.sendResponseHeaders(status, bytes.size.toLong())
-        exchange.responseBody.write(bytes)
-    }
+    private fun json(exchange: HttpExchange, status: Int, text: String) = exchanges.json(exchange, status, text)
 }

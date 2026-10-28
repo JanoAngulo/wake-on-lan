@@ -228,6 +228,15 @@ class AgentServerTest {
         }
     }
 
+    @Test
+    fun oversizedBodyIsRefusedByAgent() {
+        paired()
+        val response = send("POST", "/command", "x".repeat(4097))
+        assertEquals(413, response.statusCode())
+        assertEquals("too_large", WakeJson.decodeFromString(ErrorBody.serializer(), response.body()).error)
+        assertTrue(actions.calls.isEmpty())
+    }
+
     private fun unlockBody(sealFor: String) =
         WakeJson.encodeToString(UnlockRequest.serializer(), sealPassword(secret, sealFor, "pässwörd".toByteArray()))
 
