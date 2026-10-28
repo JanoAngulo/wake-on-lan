@@ -10,7 +10,10 @@ data class NicInfo(
 )
 
 // Never the LAN: tunnels and local-only links.
-private val EXCLUDED_MARKERS = listOf("radmin", "vpn", "vmware", "virtualbox", "tap-", "wsl", "loopback", "bluetooth")
+private val EXCLUDED_MARKERS = listOf(
+    "radmin", "vpn", "vmware", "virtualbox", "tap-", "wsl", "loopback", "bluetooth",
+    "tunnel", "wireguard", "tailscale", "wintun", "nordlynx",
+)
 
 // Hyper-V adapters carry the LAN in two cases: the host's vEthernet on an External switch, and the network
 // card inside a Hyper-V VM. Both hold the default gateway's subnet; Default Switch and WSL never do.

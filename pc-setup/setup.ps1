@@ -90,7 +90,7 @@ function Stop-Agent {
 # or the network card inside a Hyper-V VM. Default Switch and WSL have no gateway, so they never match.
 function Get-LanAdapter {
     $gateway = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
-        Where-Object { $_.InterfaceDescription -notmatch 'Radmin|VPN|VMware|VirtualBox|TAP|Wi-?Fi|Wireless' } |
+        Where-Object { $_.InterfaceDescription -notmatch 'Radmin|VPN|VMware|VirtualBox|TAP|Wi-?Fi|Wireless|Tunnel|WireGuard|Tailscale|Wintun|NordLynx' } |
         Where-Object { $_.InterfaceDescription -notmatch 'Virtual' -or $_.InterfaceDescription -match 'Hyper-V' } |
         Sort-Object { $_.InterfaceDescription -match 'Hyper-V|Virtual' } |
         Select-Object -First 1

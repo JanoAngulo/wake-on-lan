@@ -62,6 +62,7 @@ private class Listeners(nic: NicInfo, scheduler: CommandScheduler, store: Secret
 }
 
 fun main(args: Array<String>) {
+    limitHttpServerTimes()
     dataDir.mkdirs()
     val lock = RandomAccessFile(File(dataDir, "agent.lock"), "rw").channel.tryLock()
     if (lock == null) {
