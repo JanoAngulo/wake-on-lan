@@ -226,6 +226,8 @@ Reuses the existing visual system (dark, Manrope, current pills and buttons).
 
 ## 13. Version 2 (not in this build): sign in after cold boot
 
+Built in version 1.2 as a startup task rather than a service: see `docs/specs/2026-10-28-cold-boot-sign-in-design.md`.
+
 Needs a Windows service running as SYSTEM, started before login, serving `/unlock` (and `/status`) so the phone can reach the PC before anyone signs in, and the DLL supporting `CPUS_LOGON`. The service owns the pipe client role instead of the tray agent. Pairing secret storage moves to a location the service can read (DPAPI machine scope, admin-only ACL). Designed separately once version 1 is proven.
 
 ## 14. Left to the builder
