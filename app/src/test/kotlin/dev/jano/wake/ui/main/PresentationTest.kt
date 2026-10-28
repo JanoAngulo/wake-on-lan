@@ -29,6 +29,26 @@ class PresentationTest {
     }
 
     @Test
+    fun captionAtSignIn() {
+        val atSignIn = state(on.copy(agent = false, uptimeSec = null)).copy(signInScreen = true)
+        assertEquals("On, at sign-in", Presentation.caption(atSignIn, 0))
+    }
+
+    @Test
+    fun unlockEnabledAtSignInWhileOtherCommandsDisabled() {
+        val atSignIn = state(on.copy(agent = false, uptimeSec = null)).copy(signInScreen = true)
+        assertTrue(Presentation.unlockEnabled(atSignIn))
+        assertFalse(Presentation.commandsEnabled(atSignIn))
+    }
+
+    @Test
+    fun unlockFollowsLockScreenWhenAgentAnswers() {
+        assertTrue(Presentation.unlockEnabled(state(on).copy(lockScreen = true)))
+        assertFalse(Presentation.unlockEnabled(state(on)))
+        assertFalse(Presentation.unlockEnabled(state(on, UiMessage.Undo("c1", StopKind.SHUTDOWN, 0)).copy(lockScreen = true)))
+    }
+
+    @Test
     fun uptimeUnderAnHourShowsMinutes() {
         assertEquals("7m", Presentation.uptime(420))
         assertEquals("1h 0m", Presentation.uptime(3_600))

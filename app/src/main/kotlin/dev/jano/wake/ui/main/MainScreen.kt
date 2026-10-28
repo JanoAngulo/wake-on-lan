@@ -107,10 +107,11 @@ fun MainScreen(state: MainUiState, actions: MainActions, nowMs: () -> Long = Sys
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     TapButton("Sleep", WakeIcons.Sleep, enabled, reducedMotion, haptics, actions.sleep, Modifier.weight(1f))
                     // While the lock screen is up, Lock has nothing to do and Unlock takes its place (a tap:
-                    // the fingerprint is already the deliberate step).
-                    if (state.lockScreen || state.unlocking) {
+                    // the fingerprint is already the deliberate step). After a cold boot the sign-in screen counts too.
+                    if (state.lockScreen || state.signInScreen || state.unlocking) {
                         TapButton(
-                            if (state.unlocking) "Unlocking…" else "Unlock", WakeIcons.Fingerprint, enabled, reducedMotion, haptics,
+                            if (state.unlocking) "Unlocking…" else "Unlock", WakeIcons.Fingerprint, Presentation.unlockEnabled(state),
+                            reducedMotion, haptics,
                             actions.unlock, Modifier.weight(1f), primary = true, busy = state.unlocking,
                         )
                     } else {

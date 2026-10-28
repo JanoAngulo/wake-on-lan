@@ -8,6 +8,7 @@ import dev.jano.wake.data.Secrets
 import dev.jano.wake.net.PhoneNet
 import dev.jano.wake.net.ProbeResult
 import dev.jano.wake.protocol.Action
+import dev.jano.wake.protocol.SignInStatus
 import dev.jano.wake.protocol.CancelResponse
 import dev.jano.wake.protocol.CommandResponse
 import dev.jano.wake.protocol.DiscoveryReply
@@ -36,6 +37,7 @@ import kotlin.test.Test
 import dev.jano.wake.data.Authenticator
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -88,6 +90,28 @@ class MainViewModelTest {
     }
     private val passwords = FakeUnlockPasswords()
 
+    // The pre-login sign-in program: closed (unreachable) unless signInUp.
+    private var signInUp = false
+    private var signInScreen = true
+    private var signInMac = "0A:1B:2C:3D:4E:5F"
+    private var signInStatusCalls = 0
+    private var signInUnlockCalls = 0
+    private var signInUnlockResult = UnlockResult.UNLOCKED
+    private var signInUnlockError: Exception? = null
+    private val signInApi = object : SignInApi {
+        override suspend fun status(): SignInStatus {
+            signInStatusCalls++
+            if (!signInUp) throw java.io.IOException("closed")
+            return SignInStatus(signInMac, 0, signInScreen)
+        }
+        override suspend fun unlock(password: ByteArray): UnlockResponse {
+            signInUnlockCalls++
+            sentPasswords += password.copyOf()
+            signInUnlockError?.let { throw it }
+            return UnlockResponse(signInUnlockResult)
+        }
+    }
+
     private val graph = AppGraph(
         repository = repo,
         secrets = object : Secrets {
@@ -97,7 +121,7 @@ class MainViewModelTest {
         },
         prober = HostProber { _, _ -> polls++; if (hostUp) ProbeResult.Up(2) else ProbeResult.Down },
         agents = AgentApiFactory { _, _ -> agentApi },
-        signIns = SignInApiFactory { _, _ -> error("unused") },
+        signIns = SignInApiFactory { _, _ -> signInApi },
         discoverer = Discoverer {
             discoveries++
             kotlinx.coroutines.delay(discoveryDelayMs)
@@ -293,6 +317,86 @@ class MainViewModelTest {
         seed()
         vm.pollOnce()
         runCurrent()
+    }
+
+    /** After a cold boot: the PC answers, the agent doesn't, the sign-in program says the sign-in screen is up. */
+    private suspend fun TestScope.atSignIn() {
+        agentUp = false
+        signInUp = true
+        seed()
+        vm.pollOnce()
+        runCurrent()
+    }
+
+    @Test
+    fun signInScreenShownWhenAgentSilentAndServiceSaysSo() = scope.runTest {
+        atSignIn()
+        assertTrue(vm.ui.value.signInScreen)
+        assertFalse(vm.ui.value.lockScreen)
+    }
+
+    @Test
+    fun signInReplyFromOtherMacIgnored() = scope.runTest {
+        signInMac = "0A:1B:2C:3D:4E:60"
+        atSignIn()
+        assertFalse(vm.ui.value.signInScreen)
+    }
+
+    @Test
+    fun signInNotAskedWhenAgentAnswers() = scope.runTest {
+        signInUp = true
+        lockedPc()
+        assertEquals(0, signInStatusCalls)
+        assertFalse(vm.ui.value.signInScreen)
+    }
+
+    @Test
+    fun unlockWithoutAgentGoesToSignInService() = scope.runTest {
+        savePassword()
+        atSignIn()
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(1, signInUnlockCalls)
+        assertEquals(0, unlockCalls)
+        assertContentEquals("pässwörd".toByteArray(), sentPasswords.single())
+        assertEquals(UiMessage.Info("MY-PC signed in"), vm.ui.value.message)
+        assertFalse(vm.ui.value.signInScreen)
+    }
+
+    @Test
+    fun unlockPrefersAgentWhenAgentAnswers() = scope.runTest {
+        savePassword()
+        signInUp = true
+        lockedPc()
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(1, unlockCalls)
+        assertEquals(0, signInUnlockCalls)
+    }
+
+    @Test
+    fun wrongPasswordViaSignInDeletesSavedPassword() = scope.runTest {
+        savePassword()
+        atSignIn()
+        signInUnlockResult = UnlockResult.WRONG_PASSWORD
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(false, passwords.saved("d1"))
+        assertEquals(
+            UiMessage.OpenUnlockSetup("d1", "MY-PC didn't accept the saved password. Enter it again."),
+            vm.ui.value.message,
+        )
+    }
+
+    @Test
+    fun signInUnreachableShowsMessageAndDoesNotRetry() = scope.runTest {
+        savePassword()
+        atSignIn()
+        signInUnlockError = java.io.IOException("down")
+        vm.unlock(approve)
+        advanceUntilIdle()
+        assertEquals(1, signInUnlockCalls)
+        assertEquals(UiMessage.Info("Couldn't reach the agent on the PC."), vm.ui.value.message)
     }
 
     @Test

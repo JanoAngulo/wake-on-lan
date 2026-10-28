@@ -10,7 +10,9 @@ import dev.jano.wake.net.ProbeResult
 import dev.jano.wake.net.isHome
 import dev.jano.wake.net.subnetOf
 import dev.jano.wake.protocol.Action
+import dev.jano.wake.protocol.SignInStatus
 import dev.jano.wake.protocol.StatusResponse
+import dev.jano.wake.protocol.UnlockResponse
 import dev.jano.wake.protocol.UnlockResult
 import dev.jano.wake.protocol.parseMac
 import dev.jano.wake.status.PcState
@@ -37,6 +39,7 @@ class MainViewModel(
     private val machine = StatusMachine(clock)
     private val phone = MutableStateFlow(PhoneNet(false, null, null))
     private val agentStatus = MutableStateFlow<StatusResponse?>(null)
+    private val signInStatus = MutableStateFlow<SignInStatus?>(null)
     private val message = MutableStateFlow<UiMessage?>(null)
     private val unlocking = MutableStateFlow(false)
     private var downs = 0
@@ -62,7 +65,11 @@ class MainViewModel(
             )
         },
         unlocking,
-    ) { state, busy -> state.copy(unlocking = busy) }.stateIn(
+        signInStatus,
+    ) { state, busy, signIn ->
+        val noAgent = (state.pc as? PcState.On)?.agent == false
+        state.copy(unlocking = busy, signInScreen = noAgent && signIn?.signInScreen == true)
+    }.stateIn(
         viewModelScope,
         SharingStarted.Eagerly,
         MainUiState(null, 0, machine.state.value, null, phone.value, false, true, null),
@@ -93,6 +100,12 @@ class MainViewModel(
         // Ask the agent only when the PC answers at all, and only trust a reply from this PC's MAC.
         val status = if (host is ProbeResult.Up && ip != null && secret != null) {
             runCatching { graph.agents.create(device, secret).status() }.getOrNull()
+                ?.takeIf { parseMac(it.mac) == parseMac(device.mac) }
+        } else null
+
+        // No agent before anyone signs in after a cold boot: ask the sign-in program instead, same MAC rule.
+        signInStatus.value = if (host is ProbeResult.Up && ip != null && secret != null && status == null) {
+            runCatching { graph.signIns.create(device, secret).status() }.getOrNull()
                 ?.takeIf { parseMac(it.mac) == parseMac(device.mac) }
         } else null
 
@@ -162,7 +175,7 @@ class MainViewModel(
 
     /** Fingerprint, then one /unlock. Never retried: a wrong password must not count twice toward lockout. */
     fun unlock(auth: Authenticator) {
-        if (!agentReady() || unlocking.value) return
+        if (!(agentReady() || signInReady()) || unlocking.value) return
         unlocking.value = true
         viewModelScope.launch {
             try {
@@ -175,7 +188,10 @@ class MainViewModel(
 
     private suspend fun runUnlock(auth: Authenticator) {
         val device = graph.repository.store.first().selected ?: return
-        val api = api() ?: return
+        // The agent when it's there (lock screen); otherwise the sign-in program (sign-in screen after a cold boot).
+        val viaAgent = agentReady()
+        val send: suspend (ByteArray) -> UnlockResponse =
+            if (viaAgent) (api() ?: return)::unlock else (signInApi() ?: return)::unlock
         val passwords = graph.unlockPasswords
         val opened = runCatching { passwords.openCipher(device.id) }
             .getOrElse { return run { message.value = UiMessage.Info("Couldn't unlock ${device.name}.") } }
@@ -189,7 +205,7 @@ class MainViewModel(
         val password = runCatching { passwords.open(cipher, device.id) }
             .getOrElse { return run { message.value = UiMessage.Info("Couldn't unlock ${device.name}.") } }
         val response = try {
-            api.unlock(password)
+            send(password)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             return unreachable()
@@ -197,7 +213,7 @@ class MainViewModel(
             password.fill(0)
         }
         message.value = when (response.result) {
-            UnlockResult.UNLOCKED -> UiMessage.Info("${device.name} unlocked")
+            UnlockResult.UNLOCKED -> UiMessage.Info(if (viaAgent) "${device.name} unlocked" else "${device.name} signed in")
             UnlockResult.WRONG_PASSWORD -> {
                 passwords.remove(device.id)
                 UiMessage.OpenUnlockSetup(device.id, "${device.name} didn't accept the saved password. Enter it again.")
@@ -210,7 +226,7 @@ class MainViewModel(
         }
         // Windows' own answer says the lock screen is gone; don't wait for the next poll to show it.
         if (response.result == UnlockResult.UNLOCKED || response.result == UnlockResult.NOT_LOCKED) {
-            agentStatus.value = agentStatus.value?.copy(lockScreen = false)
+            if (viaAgent) agentStatus.value = agentStatus.value?.copy(lockScreen = false) else signInStatus.value = null
         }
     }
 
@@ -260,6 +276,15 @@ class MainViewModel(
     }
 
     private fun agentReady(): Boolean = (machine.state.value as? PcState.On)?.agent == true
+
+    private fun signInReady(): Boolean =
+        (machine.state.value as? PcState.On)?.agent == false && signInStatus.value?.signInScreen == true
+
+    private suspend fun signInApi(): SignInApi? {
+        val device = graph.repository.store.first().selected ?: return null
+        val secret = graph.secrets.get(device.id) ?: return null
+        return graph.signIns.create(device, secret)
+    }
 
     private suspend fun api(): AgentApi? {
         val device = graph.repository.store.first().selected ?: return null
