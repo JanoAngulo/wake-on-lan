@@ -137,9 +137,17 @@ function Install-UnlockModule($dll) {
             # in (LogonUI picks it up the next time it starts), and delete the old one at the next reboot.
             $aside = "$UnlockTarget.old-$([DateTime]::Now.Ticks)"
             Rename-Item -LiteralPath $UnlockTarget -NewName (Split-Path $aside -Leaf)
-            Copy-Item -LiteralPath $dll -Destination $UnlockTarget -Force
+            try {
+                Copy-Item -LiteralPath $dll -Destination $UnlockTarget -Force
+            } catch {
+                # Never leave the registry pointing at a missing DLL: put the old one back.
+                Rename-Item -LiteralPath $aside -NewName (Split-Path $UnlockTarget -Leaf)
+                throw
+            }
             Add-NativeMoveFile
-            [void][Wake.Native]::MoveFileEx($aside, $null, 4)  # MOVEFILE_DELAY_UNTIL_REBOOT
+            if (-not [Wake.Native]::MoveFileEx($aside, $null, 4)) {  # MOVEFILE_DELAY_UNTIL_REBOOT
+                Write-Output "Delete $aside after the next restart."
+            }
         }
     }
     New-Item -Force $UnlockComKey | Out-Null
@@ -156,13 +164,17 @@ function Remove-UnlockModule {
     foreach ($key in $UnlockProviderKey, $UnlockComKey) {
         if (Test-Path $key) { Remove-Item -Recurse -Force $key }
     }
+    $dir = Split-Path $UnlockTarget
+    # Old copies set aside by an update while LogonUI had them loaded.
+    Get-ChildItem -LiteralPath $dir -Filter 'WakeCredentialProvider.dll.old-*' -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        try { Remove-Item -LiteralPath $_.FullName -Force } catch { Add-NativeMoveFile; [void][Wake.Native]::MoveFileEx($_.FullName, $null, 4) }
+    }
     if (-not (Test-Path -LiteralPath $UnlockTarget)) { return }
     try {
         Remove-Item -LiteralPath $UnlockTarget -Force
-        Remove-Item (Split-Path $UnlockTarget) -ErrorAction SilentlyContinue
+        if (-not (Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $dir -Force }
     } catch {
         Add-NativeMoveFile
-        $dir = Split-Path $UnlockTarget
         # MOVEFILE_DELAY_UNTIL_REBOOT; the then-empty folder goes with it.
         if ([Wake.Native]::MoveFileEx($UnlockTarget, $null, 4)) {
             [void][Wake.Native]::MoveFileEx($dir, $null, 4)
@@ -183,6 +195,27 @@ function Stop-SignIn {
     Stop-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue
     Get-Process WakeSignIn -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 800
+}
+
+function Test-ReparsePoint($path) {
+    $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)
+}
+
+# Deletes a folder without ever following a link or junction inside it (or at the top): cmd's rd doesn't
+# traverse reparse points, and a link at the top is removed as a link.
+function Remove-DirNoFollow($path) {
+    if (Test-ReparsePoint $path) { [IO.Directory]::Delete($path, $false); return }
+    if (Test-Path -LiteralPath $path) { & cmd /c rd /s /q "`"$path`"" 2>$null | Out-Null }
+}
+
+# True when the folder exists but wasn't made by an administrator (anyone can create folders in ProgramData),
+# or is a link. Its contents can't be trusted, and the link is removed.
+function Reset-PlantedFolder($path) {
+    if (-not (Test-Path -LiteralPath $path)) { return $false }
+    if (Test-ReparsePoint $path) { [IO.Directory]::Delete($path, $false); return $true }
+    $owner = try { (Get-Acl -LiteralPath $path).GetOwner([Security.Principal.SecurityIdentifier]).Value } catch { $null }
+    $owner -notin 'S-1-5-18', 'S-1-5-32-544'
 }
 
 function Set-SignInAcl($dir, [string[]]$grants) {
@@ -224,27 +257,30 @@ function Install-SignIn($sourceDir) {
         -Description 'Lets your paired phone sign you in at the Windows sign-in screen.' -Force | Out-Null
 
     $taskSid = ([Security.Principal.NTAccount]$SignInAccount).Translate([Security.Principal.SecurityIdentifier]).Value
-    $me = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $userSid = $me.User.Value
-    # Already set up for another account (say, run again from a different admin)? Ask before moving it: the
-    # other account's phone would otherwise send its password to this account's tile and lose it.
+    $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $savedSid = (Get-ItemProperty $WakeKey -Name SignInUserSid -ErrorAction SilentlyContinue).SignInUserSid
-    if ($savedSid -and $savedSid -ne $userSid) {
-        $savedName = try { ([Security.Principal.SecurityIdentifier]$savedSid).Translate([Security.Principal.NTAccount]).Value } catch { $savedSid }
-        if ((Read-Host "Sign-in after shutdown is set up for $savedName. Switch it to $($me.Name)? (y/N)") -notmatch '^\s*y') {
-            $userSid = $savedSid
-        }
-    }
-    # Anyone can create folders in ProgramData, so one of these may already exist and belong to someone else.
-    # Take ownership for Administrators first, wipe whatever ACL is there, then grant exactly what's needed.
-    # If any step fails, undo the install: a half-secured folder must never receive the key.
+    # Anyone can create folders in ProgramData, so one of these may already exist and belong to someone else,
+    # or be a link. Links are removed; then take ownership for Administrators, wipe whatever ACL is there and
+    # grant exactly what's needed. If any step fails, undo the install: a half-secured folder must never
+    # receive the key.
+    $planted = $false
     try {
+        foreach ($dir in $SignInData, $SignInKeyDir, $SignInLogDir) { if (Reset-PlantedFolder $dir) { $planted = $true } }
         Set-SignInAcl $SignInData '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-32-545:RX'
         Set-SignInAcl $SignInKeyDir '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', "*${userSid}:(OI)(CI)M", "*${taskSid}:(OI)(CI)RX"
         Set-SignInAcl $SignInLogDir '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', "*${taskSid}:(OI)(CI)M", "*${userSid}:(OI)(CI)RX"
     } catch {
         Remove-SignIn
         throw
+    }
+    # A key someone else could have read, or one made for another account, must not be used: the agent writes a
+    # fresh one, and pairing the phone again makes any copied key useless.
+    $keyFile = Join-Path $SignInKeyDir 'signin.key'
+    if (($planted -or ($savedSid -and $savedSid -ne $userSid)) -and (Test-Path -LiteralPath $keyFile)) {
+        Remove-Item -LiteralPath $keyFile -Force
+    }
+    if ($planted) {
+        Write-Output "Another account had created Wake's ProgramData folder before setup. It's secured now; pair your phone again to be safe."
     }
 
     # The DLL serves this account's tile when the sign-in screen lists several.
@@ -264,7 +300,8 @@ function Remove-SignIn {
     Stop-SignIn
     Unregister-ScheduledTask -TaskName $SignInTask -Confirm:$false -ErrorAction SilentlyContinue
     Remove-NetFirewallRule -DisplayName $SignInRule -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $SignInDir, $SignInData -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $SignInDir -Recurse -Force -ErrorAction SilentlyContinue  # under Program Files: admin-only
+    Remove-DirNoFollow $SignInData  # under ProgramData: may hold links someone planted
     if (Test-Path $WakeKey) { Remove-Item $WakeKey -Recurse -Force }
 }
 
@@ -276,7 +313,7 @@ function Get-AdapterProperty($adapterName, $keyword) {
 
 $results = New-Object System.Collections.Generic.List[object]
 function Add-Result($item, $current, $wanted, $ok, $note = '') {
-    $results.Add([pscustomobject]@{ Item = $item; Current = "$current"; Wanted = "$wanted"; OK = $(if ($ok) { 'yes' } else { 'NO' }); Note = $note })
+    $results.Add([pscustomobject]@{ Item = $item; Current = "$current"; Wanted = "$wanted"; OK = $(if ($null -eq $ok) { '?' } elseif ($ok) { 'yes' } else { 'NO' }); Note = $note })
 }
 
 if (-not $Check -and -not (Test-Admin)) {
@@ -295,9 +332,25 @@ if ($Uninstall) {
     return
 }
 
+# Set up for another Windows account (run again from a different admin)? Installing here moves Wake to this
+# account: the agent starts for it, and sign-in after shutdown serves its tile. Ask first, and change nothing
+# on no (or when nobody can answer).
+if (-not $Check) {
+    $savedSid = (Get-ItemProperty $WakeKey -Name SignInUserSid -ErrorAction SilentlyContinue).SignInUserSid
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent()
+    if ($savedSid -match '^S-1-[0-9-]+$' -and $savedSid -ne $me.User.Value) {
+        $savedName = try { ([Security.Principal.SecurityIdentifier]$savedSid).Translate([Security.Principal.NTAccount]).Value } catch { 'another account' }
+        $answer = try { Read-Host "Wake is set up for $savedName. Move it to $($me.Name)? $savedName's phone will need to pair again. (y/N)" } catch { '' }
+        if ($answer -notmatch '^\s*y') {
+            Write-Output 'Nothing was changed.'
+            return
+        }
+    }
+}
+
 # Which agent are we installing, and what program will run it?
 # Run from the unzipped download without -AgentDir (as the help tells people to for -Check): use its WakeAgent folder.
-if (-not $AgentDir -and (Test-Path (Join-Path $PSScriptRoot '..\WakeAgent\WakeAgent.exe'))) { $AgentDir = Join-Path $PSScriptRoot '..\WakeAgent' }
+if (-not $AgentDir -and -not $PSBoundParameters.ContainsKey('AgentJar') -and (Test-Path (Join-Path $PSScriptRoot '..\WakeAgent\WakeAgent.exe'))) { $AgentDir = Join-Path $PSScriptRoot '..\WakeAgent' }
 $bundled = [bool]$AgentDir
 if ($bundled) {
     $sourceDir = Resolve-Path $AgentDir -ErrorAction SilentlyContinue
@@ -444,14 +497,14 @@ if (-not $Check) {
 }
 $signInNow = Test-SignIn
 Add-Result 'Sign-in after shutdown' $(if ($signInNow) { 'installed' } else { 'not installed' }) `
-    $(if ($wantSignIn) { 'installed' } else { 'optional' }) ($signInNow -or -not $wantSignIn) $note
+    $(if ($wantSignIn) { 'installed' } else { 'optional' }) $(if ($signInNow -and -not (Test-Admin)) { $null } else { $signInNow -or -not $wantSignIn }) $note
 if ($signInNow) {
     $task = Get-ScheduledTask -TaskName $SignInTask -ErrorAction SilentlyContinue
     if ($task) {
         $principalOk = $task.Principal.UserId -match 'LOCAL ?SERVICE' -and "$($task.Principal.ProcessTokenSidType)" -eq 'Unrestricted'
         Add-Result "Task '$SignInTask'" "$($task.State), $($task.Principal.UserId)" 'LOCAL SERVICE with its task SID' ($principalOk -and $task.State -ne 'Disabled')
     } else {
-        Add-Result "Task '$SignInTask'" 'unknown (needs admin)' 'LOCAL SERVICE with its task SID' $true
+        Add-Result "Task '$SignInTask'" 'unknown (needs admin)' 'LOCAL SERVICE with its task SID' $null
     }
     $rule = Get-NetFirewallRule -DisplayName $SignInRule -ErrorAction SilentlyContinue
     $ruleProgram = if ($rule) { ($rule | Get-NetFirewallApplicationFilter).Program } else { $null }
@@ -466,7 +519,7 @@ if ($signInNow) {
 
 # Reported only: BitLocker is what protects the sign-in key and pairing secret on a stolen drive.
 $bitLocker = try { "$((Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop).ProtectionStatus)" } catch { 'unknown (needs admin)' }
-Add-Result "BitLocker on $env:SystemDrive" $bitLocker 'On (recommended)' $true $(if ($bitLocker -eq 'Off') { 'report only: turn it on in Settings > Privacy & security > Device encryption' } else { '' })
+Add-Result "BitLocker on $env:SystemDrive" $bitLocker 'On (recommended)' $(if ($bitLocker -like 'unknown*') { $null } else { $true }) $(if ($bitLocker -eq 'Off') { 'report only: turn it on in Settings > Privacy & security > Device encryption' } else { '' })
 
 # Reported only: "only allow Windows Hello sign-in for Microsoft accounts" can hide password-based tiles.
 $helloOnly = (Get-ItemProperty $PasswordLessKey -Name DevicePasswordLessBuildVersion -ErrorAction SilentlyContinue).DevicePasswordLessBuildVersion -eq 2
