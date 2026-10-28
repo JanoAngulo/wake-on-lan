@@ -70,7 +70,6 @@ Have more than one PC? Tap the PC name at the top to switch, or use **Settings**
 - **Unlock with your fingerprint** (optional): the locked PC signs you in without typing your password
 - **Live status**: on, off, waking, locked, shutting down, with response time and uptime
 - **Several PCs**, folders and "Wake all"
-- **Import and export** your device list
 - Works with TalkBack, large text and reduced motion
 
 ## Good to know

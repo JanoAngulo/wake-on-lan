@@ -40,8 +40,6 @@ import dev.jano.wake.ui.theme.WakeType
 fun SettingsScreen(
     message: String?,
     onDevices: () -> Unit,
-    onImport: () -> Unit,
-    onExport: () -> Unit,
     onAdvanced: () -> Unit,
     onHelp: () -> Unit,
     onGuide: () -> Unit,
@@ -52,10 +50,6 @@ fun SettingsScreen(
             ListRow("How to connect", "Set up the PC and pair this phone", WakeIcons.Wifi, onGuide)
             RowDivider()
             ListRow("Devices", "Add, edit, pair and group your PCs", WakeIcons.Power, onDevices)
-            RowDivider()
-            ListRow("Import devices", "From a JSON file", WakeIcons.Plus, onImport)
-            RowDivider()
-            ListRow("Export devices", "Pairing stays on this phone", WakeIcons.Folder, onExport)
             RowDivider()
             ListRow("Advanced", "Status checks and haptics", WakeIcons.Gear, onAdvanced)
             RowDivider()

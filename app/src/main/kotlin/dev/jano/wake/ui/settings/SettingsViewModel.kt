@@ -3,7 +3,6 @@ package dev.jano.wake.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.jano.wake.data.Authenticator
-import dev.jano.wake.data.BackupCodec
 import dev.jano.wake.data.Folder
 import dev.jano.wake.data.Store
 import dev.jano.wake.main.AppGraph
@@ -32,25 +31,6 @@ class SettingsViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** One-line result shown on the Fingerprint unlock screen. */
     val unlockInfo = MutableStateFlow<String?>(null)
-
-    suspend fun exportJson(): String = BackupCodec.export(graph.repository.store.first())
-
-    fun importJson(json: String) {
-        viewModelScope.launch {
-            BackupCodec.import(json)
-                .onSuccess { (devices, folders) ->
-                    val before = graph.repository.store.first().devices.size
-                    graph.repository.update { BackupCodec.merge(it, devices, folders) }
-                    val added = graph.repository.store.first().devices.size - before
-                    message.value = if (added == 1) "Imported 1 device" else "Imported $added devices"
-                }
-                .onFailure { message.value = "Couldn't import: ${it.message}" }
-        }
-    }
-
-    fun exported() {
-        message.value = "Devices exported"
-    }
 
     /** Fingerprint first (it authorises the new key), then save. [password] is zeroed either way. */
     fun saveUnlockPassword(deviceId: String, password: CharArray, auth: Authenticator) = viewModelScope.launch {
