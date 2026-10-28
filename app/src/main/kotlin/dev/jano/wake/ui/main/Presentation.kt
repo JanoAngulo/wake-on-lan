@@ -27,6 +27,7 @@ object Presentation {
             is PcState.Waking -> "Waking up… ${((nowMs - pc.startedMs) / 1000).coerceAtLeast(0)}s"
             is PcState.On -> when {
                 pc.agent && pc.uptimeSec != null -> "On for ${uptime(pc.uptimeSec)}"
+                state.signInScreen -> "On, at sign-in"
                 paired -> "On, waiting for agent"
                 else -> "On"
             }
@@ -54,6 +55,11 @@ object Presentation {
 
     fun commandsEnabled(state: MainUiState): Boolean =
         (state.pc as? PcState.On)?.agent == true && state.message !is UiMessage.Undo
+
+    /** Unlock works at the lock screen through the agent, or at the sign-in screen through the sign-in program. */
+    fun unlockEnabled(state: MainUiState): Boolean =
+        state.message !is UiMessage.Undo &&
+            (((state.pc as? PcState.On)?.agent == true && state.lockScreen) || state.signInScreen)
 
     fun shutdownNote(state: MainUiState): String = when (val pc = state.pc) {
         PcState.Checking -> "Checking"

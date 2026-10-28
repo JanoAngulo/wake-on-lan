@@ -17,6 +17,8 @@ data class MainUiState(
     val message: UiMessage?,
     /** The PC is on and its agent says the lock screen is up, so Unlock replaces Lock. */
     val lockScreen: Boolean = false,
+    /** After a cold boot: the PC is on, no agent yet, and its sign-in program says the sign-in screen is up. */
+    val signInScreen: Boolean = false,
     val unlockSaved: Boolean = false,
     val unlocking: Boolean = false,
 )
