@@ -10,6 +10,7 @@ import dev.jano.wake.net.ProbeResult
 import dev.jano.wake.net.isHome
 import dev.jano.wake.net.subnetOf
 import dev.jano.wake.protocol.Action
+import dev.jano.wake.protocol.Ports
 import dev.jano.wake.protocol.SignInStatus
 import dev.jano.wake.protocol.StatusResponse
 import dev.jano.wake.protocol.UnlockResponse
@@ -96,7 +97,7 @@ class MainViewModel(
 
         val ip = device.lastIp
         val secret = if (device.paired) graph.secrets.get(device.id) else null
-        val host = ip?.let { graph.prober.probe(it, listOf(device.agentPort, WINDOWS_RPC_PORT)) } ?: ProbeResult.Down
+        val host = ip?.let { graph.prober.probe(it, listOf(device.agentPort, WINDOWS_RPC_PORT, Ports.SIGNIN)) } ?: ProbeResult.Down
         // Ask the agent only when the PC answers at all, and only trust a reply from this PC's MAC.
         val status = if (host is ProbeResult.Up && ip != null && secret != null) {
             runCatching { graph.agents.create(device, secret).status() }.getOrNull()

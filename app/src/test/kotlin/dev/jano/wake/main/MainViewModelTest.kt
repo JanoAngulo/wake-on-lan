@@ -56,6 +56,7 @@ class MainViewModelTest {
     private val sentWakes = mutableListOf<MacAddress>()
     private val commands = mutableListOf<Action>()
     private var polls = 0
+    private var probedPorts: List<Int> = emptyList()
     private var statusCalls = 0
     private var discoveries = 0
     private var discoveryDelayMs = 0L
@@ -119,7 +120,7 @@ class MainViewModelTest {
             override fun get(deviceId: String) = ByteArray(32)
             override fun remove(deviceId: String) = Unit
         },
-        prober = HostProber { _, _ -> polls++; if (hostUp) ProbeResult.Up(2) else ProbeResult.Down },
+        prober = HostProber { _, ports -> polls++; probedPorts = ports; if (hostUp) ProbeResult.Up(2) else ProbeResult.Down },
         agents = AgentApiFactory { _, _ -> agentApi },
         signIns = SignInApiFactory { _, _ -> signInApi },
         discoverer = Discoverer {
@@ -333,6 +334,14 @@ class MainViewModelTest {
         atSignIn()
         assertTrue(vm.ui.value.signInScreen)
         assertFalse(vm.ui.value.lockScreen)
+    }
+
+    @Test
+    fun probeIncludesSignInPort() = scope.runTest {
+        // At the sign-in screen the agent isn't running and Windows may block 135; the sign-in port is the one that answers.
+        seed()
+        vm.pollOnce()
+        assertTrue(47615 in probedPorts, "probed $probedPorts")
     }
 
     @Test
