@@ -91,6 +91,7 @@ function Stop-Agent {
 function Get-LanAdapter {
     $gateway = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
         Where-Object { $_.InterfaceDescription -notmatch 'Radmin|VPN|VMware|VirtualBox|TAP|Wi-?Fi|Wireless' } |
+        Where-Object { $_.InterfaceDescription -notmatch 'Virtual' -or $_.InterfaceDescription -match 'Hyper-V' } |
         Sort-Object { $_.InterfaceDescription -match 'Hyper-V|Virtual' } |
         Select-Object -First 1
     if (-not $gateway) { throw 'No wired network adapter with internet access was found. Wake-on-LAN needs a cable.' }

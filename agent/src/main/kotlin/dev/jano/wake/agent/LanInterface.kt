@@ -14,14 +14,18 @@ private val EXCLUDED_MARKERS = listOf("radmin", "vpn", "vmware", "virtualbox", "
 
 // Hyper-V adapters carry the LAN in two cases: the host's vEthernet on an External switch, and the network
 // card inside a Hyper-V VM. Both hold the default gateway's subnet; Default Switch and WSL never do.
-private val HYPERV_MARKERS = listOf("hyper-v", "vethernet", "virtual")
+private val HYPERV_MARKERS = listOf("hyper-v", "vethernet")
 
 private fun matches(nic: NicInfo, markers: List<String>): Boolean {
     val name = nic.displayName.lowercase()
     return markers.any { it in name }
 }
 
-fun isVirtual(nic: NicInfo): Boolean = matches(nic, EXCLUDED_MARKERS) || matches(nic, HYPERV_MARKERS)
+// Any other "virtual" adapter (many full-tunnel VPNs) is never the LAN, gateway or not.
+private fun isExcluded(nic: NicInfo): Boolean =
+    matches(nic, EXCLUDED_MARKERS) || ("virtual" in nic.displayName.lowercase() && !matches(nic, HYPERV_MARKERS))
+
+fun isVirtual(nic: NicInfo): Boolean = isExcluded(nic) || matches(nic, HYPERV_MARKERS)
 
 internal fun ipv4ToInt(ip: String): Int =
     ip.split('.').fold(0) { acc, part -> (acc shl 8) or part.toInt() }
@@ -39,7 +43,7 @@ private fun isPrivate(ip: String): Boolean =
 
 /** The adapter the home LAN runs on; never a VPN, and a Hyper-V adapter only when it holds the gateway. */
 fun pickLanInterface(nics: List<NicInfo>, gatewayIp: String?): NicInfo? {
-    val candidates = nics.filter { it.up && it.mac != null && !matches(it, EXCLUDED_MARKERS) }
+    val candidates = nics.filter { it.up && it.mac != null && !isExcluded(it) }
     if (gatewayIp != null) {
         val onGateway = candidates.filter { sameSubnet(it.ipv4, gatewayIp, it.prefixLength) }
         (onGateway.firstOrNull { !isVirtual(it) } ?: onGateway.firstOrNull())?.let { return it }

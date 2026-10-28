@@ -53,6 +53,14 @@ class LanInterfaceTest {
     }
 
     @Test
+    fun virtualVpnAdapterOnGatewaySubnetStaysExcluded() {
+        // Full-tunnel VPNs whose names lack "vpn" hold the default route; they must never be the LAN.
+        val fortinet = NicInfo("eth6", "Fortinet Virtual Ethernet Adapter (NDIS 6.30)", "10.212.134.5", 24, "00:09:0F:00:00:01", up = true)
+        assertNull(pickLanInterface(listOf(fortinet), "10.212.134.1"))
+        assertEquals(ethernet, pickLanInterface(listOf(fortinet, ethernet), "192.168.1.1"))
+    }
+
+    @Test
     fun vpnOnGatewaySubnetStaysExcluded() {
         assertNull(pickLanInterface(listOf(radmin, defaultSwitch), "26.0.0.1"))
     }
