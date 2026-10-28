@@ -135,6 +135,18 @@ class SignInGateTest {
     }
 
     @Test
+    fun repeatedOpenFailureIsLoggedOnce() {
+        val logged = mutableListOf<String>()
+        var fail = true
+        val flaky = SignInGate({ true }, { false }, { now }, { if (fail) error("no LAN adapter") }, { }, log = { logged += it })
+        repeat(5) { flaky.tick() }
+        assertEquals(1, logged.size)
+        fail = false
+        flaky.tick()
+        assertTrue(flaky.isOpen)
+    }
+
+    @Test
     fun failedOpenStaysClosedAndRetries() {
         var attempts = 0
         val failing = SignInGate({ true }, { false }, { now }, { attempts++; error("port in use") }, { closes++ })

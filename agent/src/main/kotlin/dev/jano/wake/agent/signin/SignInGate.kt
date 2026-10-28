@@ -19,14 +19,19 @@ class SignInGate(
     var isOpen = false
         private set
     private var absentSince: Long? = null
+    private var lastFailure: String? = null
 
     fun tick() {
         val now = clock()
         if (pipeExists()) {
             absentSince = null
             if (!isOpen) {
-                // A failed open (port taken, adapter gone) stays closed; the next tick tries again.
-                isOpen = runCatching { open() }.onFailure { log("sign-in port didn't open: ${it.message}") }.isSuccess
+                // A failed open (port taken, adapter gone) stays closed; the next tick tries again. Log each
+                // distinct failure once, not every second.
+                val failure = runCatching { open() }.exceptionOrNull()
+                isOpen = failure == null
+                if (failure != null && failure.message != lastFailure) log("sign-in port didn't open: ${failure.message}")
+                lastFailure = failure?.message
             }
             return
         }
