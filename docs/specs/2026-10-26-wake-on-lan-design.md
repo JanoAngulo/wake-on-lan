@@ -5,7 +5,7 @@ Visual reference: [`docs/design/prototype.html`](../design/prototype.html) (open
 
 ## 1. Intent
 
-John sleeps in a loft bed. The PC (MY-PC) is on the desk below. Climbing down to switch it off at night, or on in the morning, is the annoyance this app removes. From the phone in bed he taps to wake the PC and holds a button to shut it down, and the app tells him truthfully whether the PC is on or off so he never has to climb down to check.
+John sleeps in a loft bed. The PC (MY-PC) is on the desk below. Climbing down to switch it off at night, or on in the morning, is the annoyance this app removes. From the phone in bed he taps to wake the PC and slides a bar to shut it down, and the app tells him truthfully whether the PC is on or off so he never has to climb down to check.
 
 This is a personal tool for one phone and one PC on one home network. It is sideloaded over ADB and never published. It replaces Wolow (a Flutter Wake-on-LAN app from the Play Store) and includes everything Wolow Premium offers that makes sense on a home LAN, without ads, billing, analytics or a cloud backend.
 
@@ -147,8 +147,8 @@ Single scrolling column, edge-to-edge with system insets. Top to bottom:
    - IP address: globe icon, `192.168.1.14`.
    - Response: activity icon, a pill, plus optional muted text.
 3. **Actions,** grouped by risk in a 2-column grid with 12 dp gaps:
-   - Shut down: full width, 68 dp, red, hold to confirm, right-side note.
-   - Reboot: full width, 60 dp, red, hold to confirm, note "Hold 1 s".
+   - Shut down: full width, 60 dp, red, slide to confirm. Disabled shows the command note on the right.
+   - Reboot: full width, 60 dp, red, slide to confirm. Disabled shows the command note on the right.
    - Sleep and Lock: half width each, 60 dp, neutral, tap.
 4. **Network section:** heading row with "Network" on the left and the subnet pill on the right (✓ Same subnet in green, ✕ Different subnet in yellow), then a card with rows: Subnet, This phone, PC link, PC MAC, Wake target (`192.168.1.255` + muted "port 9"), PC agent (pill).
 
@@ -169,12 +169,12 @@ Settings uses standard Material 3 list patterns in the same dark tokens. No cust
 
 Hero: "button" means the light disc that is tappable. "Indicator" means the green status ring that is **not** a button.
 
-| State | Header | Hero | Caption | Response | Shut down note | Commands | Other |
+| State | Header | Hero | Caption | Response | Command note | Commands | Other |
 |---|---|---|---|---|---|---|---|
 | Off | Off gradient | Button (wake) | Tap to wake | `Off` pill (neutral) + "since 23:02" | PC is off | Disabled | |
 | Waking | Mid gradient | Button with spinning ring | Waking up… 18 s | `Waiting` pill (yellow), no extra text | Not yet | Disabled | Timer counts up |
-| On | On gradient + green glow | Indicator | On for 2h 14m | `2 ms` pill (green) + "steady" | Hold 1 s | Enabled | Shut down is the primary action |
-| Holding | On | Indicator | (unchanged) | (unchanged) | Keep holding | Bar fills under the thumb | Haptic ticks |
+| On | On gradient + green glow | Indicator | On for 2h 14m | `2 ms` pill (green) + "steady" | Ready | Enabled | Shut down is the primary action |
+| Sliding | On | Indicator | (unchanged) | (unchanged) | (hidden) | Bar fills behind the thumb | Haptic ticks |
 | Undo window | On | Indicator | (unchanged) | (unchanged) | Sent | Disabled | Snackbar "Shutting down in 3 s" + **Undo** |
 | Shutting down | Fading to off | Dim indicator + ring | Shutting down… / Restarting… / Going to sleep… | `Still answering` pill (yellow), no extra text | Sent | Disabled | Shutdown and sleep end at Off. Restart goes Off → Waking → On on its own (no magic packet needed) |
 | Didn't wake | Off | Button, yellow ring | No answer after 90 s | `Off` pill + "no reply" | PC is off | Disabled | Yellow notice: "MY-PC didn't wake up. It may be unplugged, or Wake-on-LAN is off in the BIOS." Actions: **Retry**, **Check PC setup** |
@@ -246,10 +246,12 @@ The script and the steps are also what "Check PC setup" links to.
 ## 9. UX requirements
 
 - **Touch:** every target ≥ 48 dp. Settings gear has a 48 dp hit area.
-- **Hold to confirm** (Shut down, Reboot): 1 s hold.
-  - The fill follows the finger. Releasing early retracts the fill in 200 ms with no action.
-  - A tap shorter than 250 ms shakes the bar and changes its note to "Hold to shut down" / "Hold to reboot" for about 1.6 s.
-- **Accessibility alternative to holding:** with TalkBack on, or keyboard/switch access, activating Shut down or Reboot opens a Material confirm dialog: "Force shut down MY-PC? Open apps will close." with **Shut down** and **Cancel**.
+- **Slide to confirm** (Shut down, Reboot): drag the thumb to the end of the bar. Both bars are 60 dp and red, since both force-close open apps.
+  - The drag starts only after the finger moves sideways past touch slop, so a vertical scroll that begins on the bar leaves it alone and makes no haptic.
+  - The fill follows the thumb. Letting go at 90% or more completes; earlier, the thumb springs back in 200 ms with no action and no haptic.
+  - On completion the thumb locks at the end with a check and "Reboot sent" / "Shut down sent" for 900 ms, then returns.
+  - A plain tap makes the thumb peek 24 dp right and back. No haptic. Skipped when animations are off.
+- **Accessibility alternative to sliding:** with TalkBack on, or keyboard/switch access, activating Shut down or Reboot opens a Material confirm dialog: "Force shut down MY-PC? Open apps will close." with **Shut down** and **Cancel**.
 - **Undo:** a 3 s window after Shut down and Reboot, enforced by the agent's delayed execution. *(My call to make the forced action recoverable. The user didn't object after trying it in the prototype.)*
 - **TalkBack:**
   - Hero labeled "Wake MY-PC" when off and "MY-PC status: on" when on.
@@ -257,8 +259,8 @@ The script and the steps are also what "Check PC setup" links to.
   - Pills read as their full meaning, for example "Response 2 milliseconds, steady".
 - **Haptics:**
   - Light click on Wake press.
-  - Ticks every quarter while holding.
-  - Firm confirm when a hold completes.
+  - Click when a slide starts, ticks every quarter while sliding.
+  - Firm confirm when a slide completes.
   - Success pattern when the PC comes on, only if the app is in the foreground.
   - Nothing else. Toggle in settings.
 - **Feedback latency:** visible response within 100 ms of any tap.
@@ -291,7 +293,7 @@ Thesis: one authored moment, "the light comes on". Everything else is quiet feed
 - **Verify on the real phone, not a browser:**
   - `adb exec-out screencap -p > shot.png` for every main-screen state.
   - Repeat at `adb shell settings put system font_scale 1.3` (restore to `1.0`).
-  - TalkBack walk-through of wake, hold-alternative dialog and undo.
+  - TalkBack walk-through of wake, slide-alternative dialog and undo.
   - Real end-to-end test: shut down MY-PC from the phone, confirm it reaches Off, wake it from full shutdown, confirm it reaches On within 90 s.
 - Unit tests for the magic packet bytes, MAC parsing/normalization, request signing and verification (including replay rejection), and the status state machine (timeouts, 3-miss rule).
 
@@ -317,6 +319,6 @@ These are marked *(my call)* above, collected here for review:
 6. One paired phone per agent.
 7. Portrait only. minSdk 33. Package `dev.jano.wake`, label "Wake".
 11. Pairing uses an X25519 exchange confirmed by the 6-digit code (reviewer catch: a plain `/pair` response would leak the secret to a Wi-Fi sniffer).
-8. Reboot also requires hold to confirm (it is also forced).
+8. Reboot also requires slide to confirm (it is also forced).
 9. Hero disc toned down to `#D3DCF0` for night use.
 10. Secrets are excluded from export.

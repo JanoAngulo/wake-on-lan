@@ -119,15 +119,15 @@ fun MainScreen(state: MainUiState, actions: MainActions, nowMs: () -> Long = Sys
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HoldButton(
-                        label = "Reboot", icon = WakeIcons.Reboot, note = "Hold 1s",
-                        tapHint = "Hold to reboot", enabled = enabled, height = 60.dp,
+                    SlideButton(
+                        label = "Reboot", prompt = "Slide to reboot", icon = WakeIcons.Reboot,
+                        note = Presentation.commandNote(state), enabled = enabled,
                         reducedMotion = reducedMotion, haptics = haptics,
                         confirmQuestion = "Force reboot $name?", confirmLabel = "Reboot", onConfirm = actions.reboot,
                     )
-                    HoldButton(
-                        label = "Shut down", icon = WakeIcons.Power, note = Presentation.shutdownNote(state),
-                        tapHint = "Hold to shut down", enabled = enabled, height = 68.dp,
+                    SlideButton(
+                        label = "Shut down", prompt = "Slide to shut down", icon = WakeIcons.Power,
+                        note = Presentation.commandNote(state), enabled = enabled,
                         reducedMotion = reducedMotion, haptics = haptics,
                         confirmQuestion = "Force shut down $name?", confirmLabel = "Shut down", onConfirm = actions.shutdown,
                     )

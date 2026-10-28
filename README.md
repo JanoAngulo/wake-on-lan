@@ -45,7 +45,7 @@ That's it. The same steps are in the app under **Settings → How to connect**.
     <td align="center" width="25%"><img src="docs/screenshots/off.png" alt="PC is off. The big power button says Tap to wake, and Response shows Off since 23:02." width="200"></td>
     <td align="center" width="25%"><img src="docs/screenshots/waking.png" alt="Waking up, 18 seconds in. A ring spins around the power button and Response shows Waiting." width="200"></td>
     <td align="center" width="25%"><img src="docs/screenshots/on.png" alt="PC is on for 2 hours 14 minutes. The button turns into a green ring and Sleep, Lock, Reboot and Shut down are enabled." width="200"></td>
-    <td align="center" width="25%"><img src="docs/screenshots/undo.png" alt="After holding Shut down, a bar at the bottom says Shutting down in 3s with an Undo button." width="200"></td>
+    <td align="center" width="25%"><img src="docs/screenshots/undo.png" alt="After sliding Shut down, a bar at the bottom says Shutting down in 3s with an Undo button." width="200"></td>
   </tr>
   <tr>
     <td align="center"><b>1. Tap to wake</b></td>
@@ -58,14 +58,14 @@ That's it. The same steps are in the app under **Settings → How to connect**.
 1. **Wake.** When the PC is off, tap the big power button.
 2. **Wait.** The ring spins while the PC boots, usually 20 to 40 seconds. If it hasn't answered after 90 seconds, the app tells you and offers to retry.
 3. **Use it.** Once the PC is on, the button turns into a green ring showing how long it's been up. **Sleep** and **Lock** work with a tap.
-4. **Turn it off.** **Reboot** and **Shut down** need a 1-second hold so a stray tap can't close your apps. You then get 3 seconds to tap **Undo**.
+4. **Turn it off.** **Reboot** and **Shut down** need a slide to the end, so a stray tap or a scroll can't close your apps. You then get 3 seconds to tap **Undo**.
 
 Have more than one PC? Tap the PC name at the top to switch, or use **Settings** to add another one.
 
 ## What it does
 
 - **Wake** the PC from full shutdown or sleep with one tap
-- **Shut down and reboot** with hold-to-confirm and a 3-second Undo. These are forced, so open apps close.
+- **Shut down and reboot** with slide-to-confirm and a 3-second Undo. These are forced, so open apps close.
 - **Sleep and lock** with one tap
 - **Unlock with your fingerprint** (optional): the locked PC signs you in without typing your password
 - **Live status**: on, off, waking, locked, shutting down, with response time and uptime

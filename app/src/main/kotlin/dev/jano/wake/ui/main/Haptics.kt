@@ -20,14 +20,13 @@ object HapticPatterns {
 
 /**
  * The few haptics the spec allows (§9), all switchable from settings. Played on the vibrator directly:
- * the HapticFeedbackConstants for tick, confirm and reject all feel like the same short tap on some phones.
+ * the HapticFeedbackConstants for tick and confirm both feel like the same short tap on some phones.
  * Usage TOUCH keeps them under the phone's own touch-vibration setting.
  */
 class Haptics(private val vibrator: Vibrator?, private val enabled: Boolean) {
     fun press() = play(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
     fun tick() = play(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
     fun confirm() = play(HapticPatterns.confirm.let { VibrationEffect.createWaveform(it.timings, it.amplitudes, -1) })
-    fun reject() = play(VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK))
 
     private fun play(effect: VibrationEffect) {
         if (enabled) vibrator?.vibrate(effect, touch)

@@ -61,7 +61,7 @@ object Presentation {
         state.message !is UiMessage.Undo &&
             (((state.pc as? PcState.On)?.agent == true && state.lockScreen) || state.signInScreen)
 
-    fun shutdownNote(state: MainUiState): String = when (val pc = state.pc) {
+    fun commandNote(state: MainUiState): String = when (val pc = state.pc) {
         PcState.Checking -> "Checking"
         is PcState.Off, is PcState.DidntWake -> "PC is off"
         is PcState.Waking -> "Not yet"
@@ -71,7 +71,7 @@ object Presentation {
             state.message is UiMessage.Undo -> "Sent"
             state.device?.paired != true -> "Pair to use"
             !pc.agent -> "Needs agent"
-            else -> "Hold 1s"
+            else -> "Ready"
         }
     }
 
