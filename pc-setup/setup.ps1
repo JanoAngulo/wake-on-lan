@@ -68,12 +68,22 @@ function Stop-Agent {
     Start-Sleep -Milliseconds 800
 }
 
+# Hyper-V adapters count only when they hold the default gateway: the host's vEthernet on an External switch,
+# or the network card inside a Hyper-V VM. Default Switch and WSL have no gateway, so they never match.
 function Get-LanAdapter {
     $gateway = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
-        Where-Object { $_.InterfaceDescription -notmatch 'Radmin|VPN|Virtual|Hyper-V|TAP|Wi-?Fi|Wireless' } |
+        Where-Object { $_.InterfaceDescription -notmatch 'Radmin|VPN|VMware|VirtualBox|TAP|Wi-?Fi|Wireless' } |
+        Sort-Object { $_.InterfaceDescription -match 'Hyper-V|Virtual' } |
         Select-Object -First 1
     if (-not $gateway) { throw 'No wired network adapter with internet access was found. Wake-on-LAN needs a cable.' }
     Get-NetAdapter -InterfaceIndex $gateway.InterfaceIndex
+}
+
+# The card whose wake settings matter. Behind an External switch that's the physical NIC sharing the vEthernet's MAC.
+function Get-WakeAdapter($lan) {
+    if ($lan.HardwareInterface) { return $lan }
+    $physical = Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object MacAddress -eq $lan.MacAddress | Select-Object -First 1
+    if ($physical) { $physical } else { $lan }
 }
 
 function Get-Javaw {
@@ -165,7 +175,7 @@ if ($bundled) {
 }
 
 # 1. Adapter wake settings
-$adapter = Get-LanAdapter
+$adapter = Get-WakeAdapter (Get-LanAdapter)
 $wanted = @{ '*WakeOnMagicPacket' = 'Enabled'; 'S5WakeOnLan' = 'Enabled' }
 foreach ($keyword in $wanted.Keys) {
     $prop = Get-AdapterProperty $adapter.Name $keyword
