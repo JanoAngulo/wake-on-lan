@@ -115,10 +115,10 @@ To remove it, run **Uninstall Wake Agent.cmd**. If Windows is still using the fi
 
 The app shows the same details under **Settings → Privacy & security**.
 
-- **Nothing leaves your home network.** No account, no ads, no analytics, no crash reports. Wake only talks to your own PCs.
-- **On the phone:** your PCs' names, IP and MAC addresses; the pairing key, encrypted by the Android Keystore; and, if you use fingerprint unlock, your Windows password, locked behind your fingerprint. Android backup is off for Wake.
-- **On the PC:** the pairing key, readable only by your Windows account; with sign-in after shutdown, a separate sign-in key encrypted by Windows that can't send commands; and logs with local addresses and results, never your password.
-- **Removing everything:** uninstall the app, and run **Uninstall Wake Agent.cmd** on the PC.
+- **Only on your local network.** No account, no ads, no analytics, no crash reports, nothing on the internet. Wake talks to your paired PCs, plus the broadcasts that find and wake them, which other devices on the same Wi-Fi can see.
+- **On the phone:** your PCs' names, IP and MAC addresses; the pairing key, encrypted by the Android Keystore; and, if you use fingerprint unlock, your Windows password, locked behind your fingerprint. Android backup and phone-to-phone transfer are off for Wake.
+- **On the PC:** the pairing key, readable only by your Windows account; with sign-in after shutdown, a separate sign-in key that can't send commands, in a folder only your account, administrators and the sign-in program can open; and logs with local addresses and results, never your password.
+- **Removing everything:** uninstall the app, and run **Uninstall Wake Agent.cmd** on the PC from each Windows account that used Wake.
 
 ## Troubleshooting
 

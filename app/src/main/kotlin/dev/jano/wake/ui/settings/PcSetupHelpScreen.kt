@@ -49,7 +49,7 @@ private val problems = listOf(
         WakeIcons.Power, "The PC doesn't wake", "Tapping the power button does nothing",
         listOf(
             Step("Check the cable and power", "The PC must be plugged in, with a network cable connected. Most Wi-Fi cards can't wake a PC that's off."),
-            Step("Run the check on the PC", "Open PowerShell in the folder where you unzipped Wake and run this. Every row should say yes.", CHECK_COMMAND),
+            Step("Run the check on the PC", "Open PowerShell in the folder where you unzipped Wake and run this. Every row should say yes; ? means it needs PowerShell run as administrator to tell.", CHECK_COMMAND),
             Step("Turn on Wake on LAN in the BIOS", "Restart and press Delete or F2. Turn on Wake on LAN (sometimes Resume by PCI-E device) and turn off ErP Ready or Deep Sleep."),
             Step("Shut down, don't unplug", "Wake can't start a PC that lost power. If you changed Fast Startup, run Install Wake Agent.cmd again to turn it off."),
         ),
