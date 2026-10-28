@@ -20,7 +20,7 @@ class SignInKeyStoreTest {
     private val secretB = ByteArray(32) { (it + 7).toByte() }
     private val dir = Files.createTempDirectory("signin")
     private val file = dir.resolve("signin.key")
-    private val store = SignInKeyStore(dir, xor)
+    private val store = SignInKeyStore(dir, xor, trusted = { true })
 
     @Test
     fun writesDerivedKeyWhenPaired() {
@@ -55,7 +55,7 @@ class SignInKeyStoreTest {
     @Test
     fun saveDoesNothingWhenFolderMissing() {
         val missing = dir.resolve("not-installed")
-        val absent = SignInKeyStore(missing, xor)
+        val absent = SignInKeyStore(missing, xor, trusted = { true })
         assertFalse(absent.save(signInKey(secretA)))
         assertFalse(Files.exists(missing))
         syncSignInKey(secretA, absent)
@@ -69,7 +69,24 @@ class SignInKeyStoreTest {
             override fun unprotect(blob: ByteArray): ByteArray? = null
         }
         Files.write(file, byteArrayOf(1, 2, 3))
-        assertNull(SignInKeyStore(dir, refusing).load())
+        assertNull(SignInKeyStore(dir, refusing, trusted = { true }).load())
+    }
+
+    @Test
+    fun untrustedFolderIsNeverWrittenOrRead() {
+        // Someone else made the folder (or it's a link): the key must not go there, and nothing there is trusted.
+        val planted = SignInKeyStore(dir, xor, trusted = { false })
+        assertFalse(planted.save(signInKey(secretA)))
+        assertFalse(Files.exists(file))
+        Files.write(file, xor.protect(signInKey(secretB)))
+        assertNull(planted.load())
+    }
+
+    @Test
+    fun folderOwnedByAUserIsNotTheInstallers() {
+        // A temp folder belongs to whoever runs the tests, like one a standard user planted in ProgramData.
+        assertFalse(isInstallerFolder(dir))
+        assertFalse(isInstallerFolder(dir.resolve("missing")))
     }
 
     @Test

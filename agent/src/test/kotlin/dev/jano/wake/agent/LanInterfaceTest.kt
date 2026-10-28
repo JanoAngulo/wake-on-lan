@@ -61,6 +61,14 @@ class LanInterfaceTest {
     }
 
     @Test
+    fun tunnelAdaptersStayExcluded() {
+        for (name in listOf("WireGuard Tunnel", "Tailscale Tunnel", "NordLynx Tunnel", "Wintun Userspace Tunnel")) {
+            val tunnel = NicInfo("eth7", name, "100.64.0.5", 24, "00:00:00:00:00:07", up = true)
+            assertNull(pickLanInterface(listOf(tunnel), "100.64.0.1"), name)
+        }
+    }
+
+    @Test
     fun vpnOnGatewaySubnetStaysExcluded() {
         assertNull(pickLanInterface(listOf(radmin, defaultSwitch), "26.0.0.1"))
     }
