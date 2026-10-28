@@ -118,9 +118,30 @@ function Get-Javaw {
 
 function Test-UnlockModule { (Test-Path $UnlockProviderKey) -and (Test-Path -LiteralPath $UnlockTarget) }
 
+function Add-NativeMoveFile {
+    if ('Wake.Native' -as [type]) { return }
+    Add-Type -Namespace Wake -Name Native -MemberDefinition @'
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+public static extern bool MoveFileEx(string existing, string replacement, int flags);
+'@
+}
+
 function Install-UnlockModule($dll) {
     New-Item -ItemType Directory -Force (Split-Path $UnlockTarget) | Out-Null
-    Copy-Item -LiteralPath $dll -Destination $UnlockTarget -Force
+    $same = (Test-Path -LiteralPath $UnlockTarget) -and (Get-FileHash -LiteralPath $dll).Hash -eq (Get-FileHash -LiteralPath $UnlockTarget).Hash
+    if (-not $same) {
+        try {
+            Copy-Item -LiteralPath $dll -Destination $UnlockTarget -Force
+        } catch {
+            # LogonUI keeps the DLL loaded. A loaded file can still be renamed: move it aside, copy the new one
+            # in (LogonUI picks it up the next time it starts), and delete the old one at the next reboot.
+            $aside = "$UnlockTarget.old-$([DateTime]::Now.Ticks)"
+            Rename-Item -LiteralPath $UnlockTarget -NewName (Split-Path $aside -Leaf)
+            Copy-Item -LiteralPath $dll -Destination $UnlockTarget -Force
+            Add-NativeMoveFile
+            [void][Wake.Native]::MoveFileEx($aside, $null, 4)  # MOVEFILE_DELAY_UNTIL_REBOOT
+        }
+    }
     New-Item -Force $UnlockComKey | Out-Null
     Set-ItemProperty $UnlockComKey '(default)' 'Wake unlock'
     New-Item -Force "$UnlockComKey\InprocServer32" | Out-Null
@@ -140,10 +161,7 @@ function Remove-UnlockModule {
         Remove-Item -LiteralPath $UnlockTarget -Force
         Remove-Item (Split-Path $UnlockTarget) -ErrorAction SilentlyContinue
     } catch {
-        Add-Type -Namespace Wake -Name Native -MemberDefinition @'
-[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-public static extern bool MoveFileEx(string existing, string replacement, int flags);
-'@
+        Add-NativeMoveFile
         $dir = Split-Path $UnlockTarget
         # MOVEFILE_DELAY_UNTIL_REBOOT; the then-empty folder goes with it.
         if ([Wake.Native]::MoveFileEx($UnlockTarget, $null, 4)) {
