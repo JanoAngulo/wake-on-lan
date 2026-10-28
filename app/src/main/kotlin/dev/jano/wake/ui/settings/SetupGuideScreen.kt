@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import dev.jano.wake.ui.common.BodyText
 import dev.jano.wake.ui.common.PrimaryButton
@@ -25,12 +27,13 @@ import dev.jano.wake.ui.main.RowDivider
 import dev.jano.wake.ui.theme.WakeColors
 import dev.jano.wake.ui.theme.WakeType
 
-private data class Step(val title: String, val body: String)
+/** One numbered step; [code] is something to type on the PC, shown in a monospace box. */
+internal data class Step(val title: String, val body: String, val code: String? = null)
 
 private val pcSteps = listOf(
     Step(
         "Run the installer",
-        "In the Wake project folder on your PC, double-click Install Wake Agent.cmd and choose Yes when Windows asks for permission.",
+        "Unzip WakeAgent-Windows.zip on your PC, double-click Install Wake Agent.cmd and choose Yes when Windows asks for permission.",
     ),
     Step(
         "Let it finish",
@@ -47,7 +50,7 @@ private val phoneSteps = listOf(
     Step("Find your PC", "Tap Find my PC below. Wake lists every PC running the agent."),
     Step(
         "Get the code from the PC",
-        "Right-click the green power icon and choose Pair phone. A 6-digit code appears for 2 minutes.",
+        "Click the green power icon and choose Pair a phone. A 6-digit code appears for 2 minutes.",
     ),
     Step(
         "Type the code and pair",
@@ -76,7 +79,7 @@ fun SetupGuideScreen(onFindPc: () -> Unit, onTroubleshoot: () -> Unit, onBack: (
 }
 
 @Composable
-private fun StepsCard(steps: List<Step>) {
+internal fun StepsCard(steps: List<Step>) {
     KeyValueCard(inset = 0.dp) {
         steps.forEachIndexed { index, step ->
             if (index > 0) RowDivider()
@@ -86,7 +89,7 @@ private fun StepsCard(steps: List<Step>) {
 }
 
 @Composable
-private fun StepRow(number: Int, step: Step) {
+internal fun StepRow(number: Int, step: Step) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -104,6 +107,18 @@ private fun StepRow(number: Int, step: Step) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(step.title, style = WakeType.RowValue, color = WakeColors.OnSurface)
             Text(step.body, style = WakeType.Body, color = WakeColors.OnSurfaceMuted)
+            if (step.code != null) {
+                Text(
+                    step.code,
+                    style = WakeType.Note.copy(fontFamily = FontFamily.Monospace),
+                    color = WakeColors.OnSurface,
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .fillMaxWidth()
+                        .background(WakeColors.Background, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                )
+            }
         }
     }
 }
