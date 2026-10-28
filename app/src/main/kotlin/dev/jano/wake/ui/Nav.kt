@@ -36,6 +36,7 @@ import dev.jano.wake.ui.settings.DeviceExtras
 import dev.jano.wake.ui.settings.DevicePickerSheet
 import dev.jano.wake.ui.settings.DevicesScreen
 import dev.jano.wake.ui.settings.PcSetupHelpScreen
+import dev.jano.wake.ui.settings.PrivacyScreen
 import dev.jano.wake.ui.settings.SettingsScreen
 import dev.jano.wake.ui.settings.SettingsViewModel
 import dev.jano.wake.ui.settings.SetupGuideScreen
@@ -57,6 +58,7 @@ private object Routes {
     const val ADVANCED = "settings/advanced"
     const val HELP = "settings/help"
     const val GUIDE = "settings/guide"
+    const val PRIVACY = "settings/privacy"
     const val UNLOCK = "settings/device/{id}/unlock"
     fun device(id: String) = "settings/device/$id"
     fun unlock(id: String) = "settings/device/$id/unlock"
@@ -138,6 +140,7 @@ fun WakeNavHost() {
                 onDevices = { nav.navigate(Routes.DEVICES) },
                 onAdvanced = { nav.navigate(Routes.ADVANCED) },
                 onHelp = { nav.navigate(Routes.HELP) },
+                onPrivacy = { nav.navigate(Routes.PRIVACY) },
                 onGuide = { nav.navigate(Routes.GUIDE) },
                 onBack = { nav.popBackStack() },
             )
@@ -215,6 +218,7 @@ fun WakeNavHost() {
         }
         composable(Routes.ADVANCED) { AdvancedScreen(store, { settingsVm.setPollMs(it) }, { settingsVm.setHaptics(it) }, { nav.popBackStack() }) }
         composable(Routes.HELP) { PcSetupHelpScreen { nav.popBackStack() } }
+        composable(Routes.PRIVACY) { PrivacyScreen { nav.popBackStack() } }
         composable(Routes.GUIDE) {
             SetupGuideScreen(onFindPc = { nav.navigate(Routes.FIND) }, onTroubleshoot = { nav.navigate(Routes.HELP) }, onBack = { nav.popBackStack() })
         }

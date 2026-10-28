@@ -111,6 +111,15 @@ After a reboot you'll also see the Wake option on the sign-in screen. It's never
 
 To remove it, run **Uninstall Wake Agent.cmd**. If Windows is still using the file, it's deleted on the next restart.
 
+## Privacy
+
+The app shows the same details under **Settings → Privacy & security**.
+
+- **Nothing leaves your home network.** No account, no ads, no analytics, no crash reports. Wake only talks to your own PCs.
+- **On the phone:** your PCs' names, IP and MAC addresses; the pairing key, encrypted by the Android Keystore; and, if you use fingerprint unlock, your Windows password, locked behind your fingerprint. Android backup is off for Wake.
+- **On the PC:** the pairing key, readable only by your Windows account; with sign-in after shutdown, a separate sign-in key encrypted by Windows that can't send commands; and logs with local addresses and results, never your password.
+- **Removing everything:** uninstall the app, and run **Uninstall Wake Agent.cmd** on the PC.
+
 ## Troubleshooting
 
 | Problem | Try this |

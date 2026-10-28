@@ -42,6 +42,7 @@ fun SettingsScreen(
     onDevices: () -> Unit,
     onAdvanced: () -> Unit,
     onHelp: () -> Unit,
+    onPrivacy: () -> Unit,
     onGuide: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -54,6 +55,8 @@ fun SettingsScreen(
             ListRow("Advanced", "Status checks and haptics", WakeIcons.Gear, onAdvanced)
             RowDivider()
             ListRow("PC setup help", "If waking stops working", WakeIcons.Alert, onHelp)
+            RowDivider()
+            ListRow("Privacy & security", "What Wake keeps, and where", WakeIcons.Lock, onPrivacy)
         }
         if (message != null) Text(message, style = WakeType.Body, color = WakeColors.SuccessText, modifier = Modifier.padding(horizontal = 8.dp))
     }
