@@ -58,7 +58,9 @@ add_executable(sign_in_config_test tests/sign_in_config_test.cpp)
 target_link_libraries(sign_in_config_test PRIVATE provider_core)
 foreach(name picks_preferred_user picks_preferred_case_insensitive falls_back_to_first_when_absent
              falls_back_to_first_when_not_listed sddl_without_service sddl_with_service
-             sddl_drops_invalid_service_sid sddl_without_system_owner rejects_non_sid_strings)
+             sddl_drops_invalid_service_sid sddl_without_system_owner rejects_non_sid_strings
+             service_allowed_for_installing_user service_refused_for_other_user
+             service_refused_without_installing_user)
     add_test(NAME ${name} COMMAND sign_in_config_test ${name})
 endforeach()
 

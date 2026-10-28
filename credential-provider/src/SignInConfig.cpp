@@ -16,6 +16,10 @@ size_t PickUser(const std::vector<std::wstring>& sids, const std::optional<std::
     return 0;
 }
 
+bool SignInAllowedFor(const std::wstring& tileUserSid, const std::optional<std::wstring>& installingUserSid) {
+    return installingUserSid && !tileUserSid.empty() && _wcsicmp(tileUserSid.c_str(), installingUserSid->c_str()) == 0;
+}
+
 bool LooksLikeSid(const std::wstring& s) {
     if (s.size() > 184 || s.size() < 5 || s.compare(0, 4, L"S-1-") != 0 || s.back() == L'-') return false;
     for (size_t i = 4; i < s.size(); ++i) {

@@ -18,6 +18,7 @@ static int failures = 0;
 using wake::BuildPipeSddl;
 using wake::LooksLikeSid;
 using wake::PickUser;
+using wake::SignInAllowedFor;
 
 static const std::vector<std::wstring> kUsers = {L"S-1-5-21-1-1001", L"S-1-5-21-1-1002"};
 static const wchar_t kWithoutService[] = L"O:SYD:(A;;GA;;;SY)(A;;GRGW;;;S-1-5-21-1-1001)";
@@ -64,6 +65,19 @@ static void rejects_non_sid_strings() {
     CHECK(LooksLikeSid(L"S-1-5-87-1039190396-1455568823"));
 }
 
+static void service_allowed_for_installing_user() {
+    CHECK(SignInAllowedFor(L"S-1-5-21-1-1001", std::wstring(L"S-1-5-21-1-1001")));
+    CHECK(SignInAllowedFor(L"S-1-5-21-1-1001", std::wstring(L"s-1-5-21-1-1001")));
+}
+
+static void service_refused_for_other_user() {
+    CHECK(!SignInAllowedFor(L"S-1-5-21-1-1002", std::wstring(L"S-1-5-21-1-1001")));
+}
+
+static void service_refused_without_installing_user() {
+    CHECK(!SignInAllowedFor(L"S-1-5-21-1-1001", std::nullopt));
+}
+
 struct Case {
     const char* name;
     void (*run)();
@@ -80,6 +94,9 @@ int main(int argc, char** argv) {
         {"sddl_drops_invalid_service_sid", sddl_drops_invalid_service_sid},
         {"sddl_without_system_owner", sddl_without_system_owner},
         {"rejects_non_sid_strings", rejects_non_sid_strings},
+        {"service_allowed_for_installing_user", service_allowed_for_installing_user},
+        {"service_refused_for_other_user", service_refused_for_other_user},
+        {"service_refused_without_installing_user", service_refused_without_installing_user},
     };
     int ran = 0;
     for (const auto& c : cases) {
