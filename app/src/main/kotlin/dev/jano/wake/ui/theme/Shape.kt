@@ -26,8 +26,8 @@ object Motion {
     const val SNACK_IN_MS = 300
     const val SNACK_OUT_MS = 200
     const val SPIN_MS = 1300
-    const val HOLD_MS = 1000
-    const val TAP_MAX_MS = 250
+    const val SENT_MS = 900
+    const val PEEK_MS = 160
     const val RETRACT_MS = 200
-    const val SHAKE_MS = 320
+    const val CHEVRON_MS = 1600
 }

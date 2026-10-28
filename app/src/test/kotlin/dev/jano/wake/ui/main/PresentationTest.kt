@@ -55,14 +55,14 @@ class PresentationTest {
     }
 
     @Test
-    fun shutdownNoteExplainsWhyDisabled() {
-        assertEquals("PC is off", Presentation.shutdownNote(state(PcState.Off(null))))
-        assertEquals("Not yet", Presentation.shutdownNote(state(PcState.Waking(0))))
-        assertEquals("Hold 1s", Presentation.shutdownNote(state(on)))
-        assertEquals("Sent", Presentation.shutdownNote(state(on, UiMessage.Undo("c1", StopKind.SHUTDOWN, 0))))
-        assertEquals("Needs agent", Presentation.shutdownNote(state(on.copy(agent = false))))
-        assertEquals("Pair to use", Presentation.shutdownNote(state(on.copy(agent = false), paired = false)))
-        assertEquals("Unavailable", Presentation.shutdownNote(state(PcState.Away(null))))
+    fun commandNoteExplainsWhyDisabled() {
+        assertEquals("PC is off", Presentation.commandNote(state(PcState.Off(null))))
+        assertEquals("Not yet", Presentation.commandNote(state(PcState.Waking(0))))
+        assertEquals("Ready", Presentation.commandNote(state(on)))
+        assertEquals("Sent", Presentation.commandNote(state(on, UiMessage.Undo("c1", StopKind.SHUTDOWN, 0))))
+        assertEquals("Needs agent", Presentation.commandNote(state(on.copy(agent = false))))
+        assertEquals("Pair to use", Presentation.commandNote(state(on.copy(agent = false), paired = false)))
+        assertEquals("Unavailable", Presentation.commandNote(state(PcState.Away(null))))
     }
 
     @Test
@@ -83,7 +83,7 @@ class PresentationTest {
     fun checkingClaimsNothing() {
         val checking = state(PcState.Checking)
         assertEquals("Checking…", Presentation.caption(checking, 0))
-        assertEquals("Checking", Presentation.shutdownNote(checking))
+        assertEquals("Checking", Presentation.commandNote(checking))
         assertEquals("MY-PC status: checking", Presentation.heroDescription(checking))
         assertFalse(Presentation.commandsEnabled(checking))
     }
