@@ -26,7 +26,12 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    // Same request-time caps the programs set at startup (limitHttpServerTimes); the JDK reads them once per JVM.
+    systemProperty("sun.net.httpserver.maxReqTime", "5")
+    systemProperty("sun.net.httpserver.maxRspTime", "30")
+}
 
 tasks.register<Jar>("agentJar") {
     archiveFileName.set("wake-agent.jar")

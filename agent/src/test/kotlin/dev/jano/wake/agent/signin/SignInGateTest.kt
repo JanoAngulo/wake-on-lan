@@ -77,6 +77,20 @@ class SignInGateTest {
     }
 
     @Test
+    fun closesAfterHardLimitEvenWhileBusy() {
+        pipe = true
+        tickAt(0)
+        pipe = false
+        inFlight = true
+        tickAt(1_000)
+        tickAt(25_900)
+        assertEquals(0, closes)
+        tickAt(26_000)
+        assertEquals(1, closes)
+        assertFalse(gate.isOpen)
+    }
+
+    @Test
     fun pipeReturningDuringGraceCancelsClose() {
         pipe = true
         tickAt(0)

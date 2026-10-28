@@ -2,6 +2,8 @@ package dev.jano.wake.agent.signin
 
 import dev.jano.wake.agent.AGENT_VERSION
 import dev.jano.wake.agent.NicInfo
+import dev.jano.wake.agent.SignedExchange
+import dev.jano.wake.agent.limitHttpServerTimes
 import dev.jano.wake.agent.WindowsSystem
 import dev.jano.wake.agent.pickLanInterface
 import dev.jano.wake.agent.unlock.PipeUnlockRelay
@@ -30,6 +32,7 @@ private fun log(message: String) {
 }
 
 fun main(args: Array<String>) {
+    limitHttpServerTimes()
     val dir = signInLogDir().toFile()
     if (!dir.isDirectory) exitProcess(1)  // the installer creates it with the right ACL; never create it here
     val lock = RandomAccessFile(File(dir, "signin.lock"), "rw").channel.tryLock() ?: exitProcess(0)
@@ -48,10 +51,12 @@ fun main(args: Array<String>) {
     var nic: NicInfo? = null
     var server: SignInServer? = null
     var lastPipe: Boolean? = null
+    // One for every server this program opens, so a nonce seen before a close is still refused after a reopen.
+    val exchanges = SignedExchange(keys::load, System::currentTimeMillis)
 
     fun openServer() {
         val lan = nic ?: error("no LAN adapter")
-        val next = SignInServer(InetSocketAddress(lan.ipv4, Ports.SIGNIN), { lan.mac!! }, keys::load, System::currentTimeMillis, relay)
+        val next = SignInServer(InetSocketAddress(lan.ipv4, Ports.SIGNIN), { lan.mac!! }, keys::load, System::currentTimeMillis, relay, exchanges)
         next.start()
         server = next
         log("open on ${lan.ipv4}:${Ports.SIGNIN}")
