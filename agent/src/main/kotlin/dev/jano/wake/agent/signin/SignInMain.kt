@@ -53,8 +53,20 @@ fun main(args: Array<String>) {
     var lastPipe: Boolean? = null
     // One for every server this program opens, so a nonce seen before a close is still refused after a reopen.
     val exchanges = SignedExchange(keys::load, System::currentTimeMillis)
+    lateinit var gate: SignInGate
+
+    fun refreshAdapter() {
+        val next = pickLanInterface(WindowsSystem.nics(), WindowsSystem.defaultGateway())
+        if (next?.ipv4 == nic?.ipv4) return
+        log(if (next == null) "LAN adapter gone" else "LAN adapter ${next.ipv4}")
+        nic = next
+        gate.reset()  // reopens on the new address at the next tick, if the screen is still up
+    }
 
     fun openServer() {
+        // At boot this program usually starts before the network. Look again now rather than waiting for the
+        // 30 s refresh, so the port opens within a second of the network coming up.
+        if (nic == null) refreshAdapter()
         val lan = nic ?: error("no LAN adapter")
         val next = SignInServer(InetSocketAddress(lan.ipv4, Ports.SIGNIN), { lan.mac!! }, keys::load, System::currentTimeMillis, relay, exchanges)
         next.start()
@@ -68,7 +80,7 @@ fun main(args: Array<String>) {
         log("closed")
     }
 
-    val gate = SignInGate(
+    gate = SignInGate(
         pipeExists = {
             host.pipeExists().also {
                 if (it != lastPipe) log("pipe=$it")
@@ -81,14 +93,6 @@ fun main(args: Array<String>) {
         close = ::closeServer,
         log = ::log,
     )
-
-    fun refreshAdapter() {
-        val next = pickLanInterface(WindowsSystem.nics(), WindowsSystem.defaultGateway())
-        if (next?.ipv4 == nic?.ipv4) return
-        log(if (next == null) "LAN adapter gone" else "LAN adapter ${next.ipv4}")
-        nic = next
-        gate.reset()  // reopens on the new address at the next tick, if the screen is still up
-    }
 
     timer.scheduleWithFixedDelay({ runCatching { refreshAdapter() }.onFailure { log("refresh failed: ${it.message}") } }, 0, 30, TimeUnit.SECONDS)
     timer.scheduleWithFixedDelay({ runCatching { gate.tick() }.onFailure { log("tick failed: ${it.message}") } }, 0, 1, TimeUnit.SECONDS)
