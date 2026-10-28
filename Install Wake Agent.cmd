@@ -45,7 +45,7 @@ if errorlevel 1 (
 ) else (
     echo.
     echo Done. Look for the green power icon in the system tray ^(click ^^ if hidden^).
-    echo To pair a phone: right-click the icon and choose "Pair phone...".
+    echo To pair a phone: click the icon and choose "Pair a phone...".
 )
 echo.
 pause
